@@ -1,16 +1,24 @@
-# This is a sample Python script.
+from __future__ import annotations
+from pathlib import Path
+from model.scenario import Scenario
+from controller.sim_runner import run_and_save
+from view import plots_extended  # 👈 nuovo import
 
-# Press Maiusc+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+def main():
+    config_dir = Path("config")
+    out_csv = "out/summary.csv"
+    yaml_files = sorted(config_dir.glob("*.yaml"))
 
+    if not yaml_files:
+        raise SystemExit("Nessun file .yaml trovato in ./config")
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+    for i, path in enumerate(yaml_files):
+        scn = Scenario.from_yaml(str(path))
+        res = run_and_save(scn, out_csv, seed0=1000 + 100*i)
+        print(f"{scn.name}: {res}")
 
+    # genera e mostra i grafici estesi
+    plots_extended.main(show=True)
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+if __name__ == "__main__":
+    main()
