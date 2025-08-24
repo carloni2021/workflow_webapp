@@ -3,11 +3,14 @@ from dataclasses import dataclass, field
 from typing import Dict
 import yaml
 
-# Questo file è il ponte tra i file .yaml e l’oggetto Python Scenario,
-# che racchiude tutti i parametri di simulazione (routing indiretto, service demand, risorse, repliche, ecc.).
+"""
+    Questo file è il ponte tra i file .yaml e l’oggetto Python Scenario,
+    che racchiude tutti i parametri di simulazione (routing indiretto, service demand, risorse, repliche, ecc.).
 
-# Definisce la struttura dati che rappresenta uno scenario di simulazione.
-# Gli attributi diventano automaticamente parametri del costruttore.
+    Definisce la struttura dati che rappresenta uno scenario di simulazione.
+    Gli attributi diventano automaticamente parametri del costruttore.
+"""
+
 @dataclass
 class Scenario:
     name: str

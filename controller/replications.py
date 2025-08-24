@@ -6,6 +6,32 @@ from model.ecommerce import EcommerceModel
 from model.scenario import Scenario
 
 def run_experiment(scn: Scenario, seed0: int = 1234) -> Dict[str, float]:
+    """
+    Esegue un esperimento Monte Carlo lanciando più repliche indipendenti
+    della simulazione.
+
+    Parametri
+    ----------
+    scenario : Scenario
+        Lo scenario da simulare (contiene tempi di servizio, capacità, orizzonte, ecc.).
+    n_reps : int
+        Numero di repliche da eseguire.
+    seed0 : int, opzionale
+        Seed iniziale per il generatore pseudo-casuale. Ogni replica utilizza
+        un offset diverso (seed0 + i).
+
+    Ritorna
+    -------
+    pandas.DataFrame
+        Un DataFrame con una riga per replica e le metriche di output
+        (es. tempo medio di risposta, throughput, utilizzazioni, n_completed).
+
+    Note
+    ----
+    - Ogni replica costruisce un nuovo `EcommerceModel` con il seed dedicato.
+    - Le metriche possono essere successivamente aggregate (media, intervalli di confidenza).
+    """
+
     results: List[Dict[str, float]] = []
     # Esegue N repliche (N = scn.replications).
     for r in range(scn.replications):
