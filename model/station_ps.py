@@ -101,12 +101,13 @@ class ProcessorSharingStation:
         # Aggiorna (integra) l'area con il livello prima dell'arrivo
         self._area_accumulate()
 
-        # aggiungi job
+        # Aggiungi job
         ev = self.env.event() # Evento di completamento del job
         self.active.append(ProcessorSharingStation._Token(demand_s, ev)) # Il job è da subito “attivo” (ricordiamo che PS → niente coda)
         self._recompute_busy() #  Aggiorna busy in base a n e capacity
 
-        # Se il loop era in attesa di arrivi, viene svegliato il planner (cambio di n → cambia la stima del prox completamento)
+        # Se il loop era in attesa di arrivi, viene svegliato il planner
+        # (cambio di n → cambia la stima del prox completamento)
         if self._arrival_ev is not None and not self._arrival_ev.triggered:
             self._arrival_ev.succeed()
             self._arrival_ev = None
@@ -153,12 +154,23 @@ class ProcessorSharingStation:
             min_remaining = min(t.remaining for t in self.active)
             dt_to_finish = min_remaining / rate_per_job if rate_per_job > 0 else float('inf')
 
-            # Si attende l’AnyOf:
+            # Si attende tramite AnyOf.
+            # AnyOf è un composite event: rappresenta l’attesa finché almeno uno tra un insieme di eventi succede
+            # Il processo che fa yield si sospende finché uno qualunque degli eventi della lista è completato.
+            # In questo caso:
             # 1. timeout_ev: Il completamento previsto,
             # 2. self._arrival_ev: Un “campanello” che ps_service() farà scattare quando arriva un nuovo job.
             #                      Se scatta l’arrivo prima del timeout, il rate non è più valido e va ricalcolato.
-            timeout_ev = self.env.timeout(dt_to_finish)
-            self._arrival_ev = self.env.event()
+            #
+            #
+            # env.timeout(delay) crea un evento programmato che verrà completato (→ succeed())
+            # dopo che il tempo simulato sarà avanzato di delay unità.
+            # Non mette in pausa il programma reale, ma l’orologio di SimPy
+            # (il Simulation Clock di cui si parla nel Next Event).
+            timeout_ev = self.env.timeout(dt_to_finish)     # Possibile completamento
+            # Crea un evento “vuoto” in SimPy,
+            # che verrà usato come un campanello per notificare lo scheduler di un nuovo arrivo nella stazione Processor Sharing.
+            self._arrival_ev = self.env.event()     # Campanello di arrivo
             res = yield simpy.AnyOf(self.env, [timeout_ev, self._arrival_ev])
 
             # Aggiorna le domande residue per il tempo trascorso
