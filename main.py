@@ -2,7 +2,6 @@ from __future__ import annotations
 from pathlib import Path
 from model.scenario import Scenario
 from controller.sim_runner import run_and_save
-from view import plots_extended
 
 # Seed iniziale per ogni scenario
 SEED0 = 1000
@@ -31,9 +30,6 @@ def main():
         res = run_and_save(scn, out_csv, seed0=SEED0)
 
         print(f"{scn.name}: {res}")
-
-    # Genera e mostra i grafici estesi
-    plots_extended.main(show=True)
 
 if __name__ == "__main__":
     main()
