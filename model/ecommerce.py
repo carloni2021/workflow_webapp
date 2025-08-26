@@ -24,9 +24,8 @@ class EcommerceModel:
         self.scenario = scenario                 # Scenario con parametri (domande, capacità, tempi, ecc.)
         self.env = simpy.Environment()           # Ambiente di simulazione discreta SimPy (gestisce il tempo simulato)
 
-        # rndbook.seed(seed)                        # Imposta il PRNG globale di Python (influenza anche altro codice globale)
-        # self.rng = rndbook.Random(seed)           # PRNG locale al modello (usato per gli interarrivi)
-        rng_setup.init_rng_for_replication(seed, 0)
+        # Inizializza il generatore di numeri casuali (RNG) con seed specifico per la replica
+        rng_setup.init_rng_for_replication(seed)
 
         # Ogni ProcessorSharingStation è una risorsa PS:
         # se ci sono n job attivi e capacità c, ciascuno riceve c/n di servizio in parallelo (niente coda separata).

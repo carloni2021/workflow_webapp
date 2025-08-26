@@ -6,20 +6,18 @@ from .rngs import plantSeeds, selectStream  # multi-stream RNG 0..255
 # Mappa simbolica → indice stream (personalizzabile)
 STREAMS: Dict[str, int] = {
     "arrivals": 0,
-    "srv_S1":   1,
-    "srv_S2":   2,
-    "routing":  3,
-    "setup":    4,
-    "failure":  5,
+    # "service_A": 1,
+    # "service_B": 2,
+    # "service_P": 3,
+    # Altri stream possono essere aggiunti qui
 }
 
-def init_rng_for_replication(seed0: int, rep_id: int) -> None:
+def init_rng_for_replication(seed: int) -> None:
     """
     Inizializza i 256 stream per una replica.
-    Per repliche indipendenti usa seed0 + rep_id.
-    Per scenari confrontabili via CRN, tieni lo stesso seed0.
+    Per scenari confrontabili via CRN, tenere lo stesso seed0.
     """
-    plantSeeds(seed0 + rep_id)  # inizializza coerentemente tutti gli stream.
+    plantSeeds(seed)  # Inizializza coerentemente tutti gli stream.
 
 def use_stream(name: str) -> None:
-    selectStream(STREAMS[name])  # seleziona lo stream corrente.
+    selectStream(STREAMS[name])  # Seleziona lo stream corrente.
