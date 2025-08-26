@@ -1,5 +1,5 @@
-
-import random
+import rndbook.rvgs as rvgs
+import rndbook.rng_setup as rng_setup
 import simpy
 from typing import Dict, List, Optional
 import statistics as stats
@@ -24,8 +24,9 @@ class EcommerceModel:
         self.scenario = scenario                 # Scenario con parametri (domande, capacità, tempi, ecc.)
         self.env = simpy.Environment()           # Ambiente di simulazione discreta SimPy (gestisce il tempo simulato)
 
-        random.seed(seed)                        # Imposta il PRNG globale di Python (influenza anche altro codice globale)
-        self.rng = random.Random(seed)           # PRNG locale al modello (usato per gli interarrivi)
+        # rndbook.seed(seed)                        # Imposta il PRNG globale di Python (influenza anche altro codice globale)
+        # self.rng = rndbook.Random(seed)           # PRNG locale al modello (usato per gli interarrivi)
+        rng_setup.init_rng_for_replication(seed, 0)
 
         # Ogni ProcessorSharingStation è una risorsa PS:
         # se ci sono n job attivi e capacità c, ciascuno riceve c/n di servizio in parallelo (niente coda separata).
@@ -82,7 +83,11 @@ class EcommerceModel:
         # Infatti nella funzione .run() si ha l'istruzione env.run(until=...) che tronca quando si raggiunge l’orizzonte.
         while True:
             # Genera interarrivo ~ Exp(1/interarrival_mean). Se interarrival_mean <= 0 → nessun nuovo arrivo (timeout infinito)
-            ia = self.rng.expovariate(1.0 / interarrival_mean) if interarrival_mean > 0 else float("inf")
+            #
+            # ia = self.rng.expovariate(1.0 / interarrival_mean) if interarrival_mean > 0 else float("inf")
+            #
+            rng_setup.use_stream("arrivals")
+            ia = rvgs.Exponential(interarrival_mean)
             # Attende l’interarrivo
             # Questo è il cuore della logica SimPy: il processo aspetta per ia unità di tempo simulato prima di proseguire.
             # Così i job arrivano in tempi casuali esponenziali (un processo di Poisson).

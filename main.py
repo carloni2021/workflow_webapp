@@ -4,6 +4,9 @@ from model.scenario import Scenario
 from controller.sim_runner import run_and_save
 from view import plots_extended
 
+# Seed iniziale per ogni scenario
+SEED0 = 1000
+
 def main():
     config_dir = Path("config")
     out_csv = "out/summary.csv"
@@ -25,7 +28,7 @@ def main():
         # Quindi lascia “spazio” tra seed di base se
         # replications.py fa seed0 + r per le repliche (evita collisioni casuali).
         # L'output res è un dictionary con metriche aggregate (media/stdev di R, X, U, ecc.)
-        res = run_and_save(scn, out_csv, seed0=1000 + 100*i)
+        res = run_and_save(scn, out_csv, seed0=SEED0)
 
         print(f"{scn.name}: {res}")
 
