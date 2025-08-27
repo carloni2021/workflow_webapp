@@ -1,9 +1,6 @@
 # 2FA con scaling su B: server B raddoppia la capacità
 name: "2FA (SCA) — B x2"
 interarrival_mean_s: 3.0
-warmup_s: 1000.0
-run_s: 10000.0
-replications: 5
 heavy_load: false
 capacities:
   A: 1

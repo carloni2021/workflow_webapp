@@ -1,8 +1,5 @@
 name: "1FA (base)"
 interarrival_mean_s: 3.0
-warmup_s: 1000.0
-run_s: 10000.0
-replications: 5
 heavy_load: false
 capacities:
   A: 1

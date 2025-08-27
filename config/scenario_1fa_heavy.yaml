@@ -1,9 +1,6 @@
 # 1FA con carico +15% sugli arrivi
 name: "1FA (base) — heavy +15%"
 interarrival_mean_s: 3.0
-warmup_s: 1000.0
-run_s: 10000.0
-replications: 5
 heavy_load: true              # ← abilita +15% sul tasso di arrivo
 capacities:
   A: 1

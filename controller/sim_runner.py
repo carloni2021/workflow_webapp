@@ -1,47 +1,57 @@
+# sim_runner.py
 from __future__ import annotations
-from typing import Dict
+from typing import Dict, Optional
 from model.scenario import Scenario
-from controller.replications import run_experiment
+from controller.replications import run_experiment_finite, run_batch_means_experiment
 from view.reporters import write_csv_row
 
 
-# Tipo di ritorno: un dizionario Dict[str, float] con le metriche aggregate (es. tempi di risposta medi, throughput, utilizzo…).
-def run_and_save(scn: Scenario, out_csv: str, seed0: int = 1234) -> Dict[str, float]:
+def run_and_save_finite(
+    scn: Scenario,
+    out_csv: str,
+    seed0: int = 1234,
+    *,
+    horizon_s: Optional[float] = None,
+    label_suffix: str = ""
+) -> Dict[str, float]:
     """
-    Esegue una simulazione multi-replica e salva i risultati su file.
-    Si tratta di unaFunzione “orchestratrice"
-
-    Parametri
-    ----------
-    scenario_file : str
-      Percorso al file JSON (o altro formato supportato) che descrive lo scenario.
-    output_file : str
-      Percorso del file di output (CSV/JSON) in cui salvare i risultati delle repliche.
-    n_reps : int, opzionale
-      Numero di repliche Monte Carlo da eseguire (default = 10).
-    seed0 : int, opzionale
-      Seed iniziale per il generatore pseudo-casuale (default = 42).
-
-    Effetti
-    -------
-    - Carica lo scenario da `scenario_file`.
-    - Esegue `run_experiment` con il numero di repliche richiesto.
-    - Salva il DataFrame risultante in `output_file`.
-
-    Note
-    ----
-    - È il punto di ingresso tipico da linea di comando (`python sim_runner.py ...`).
-    - Consente di mantenere una pipeline completa: carica → simula → salva.
+    Orizzonte finito (repliche): calcola media, stdev e IC al 95% e scrive una riga nel CSV.
     """
-
-    # run_experiment chiama la simulazione vera e propria
-    # Fa girare il modello un numero di volte pari a "replications"
-    # Per ogni replica crea un EcommerceModel (in model/ecommerce.py), lo esegue, raccoglie i risultati.
-    # Poi calcola le medie e le stdev delle metriche e restituisce un dizionario.
-    agg = run_experiment(scn, seed0=seed0)
-
-    # Scrive una riga con i valori del dict agg.
-    # Così, se si hanno più scenari o più run, ogni risultato finisce in una riga del CSV.
+    agg = run_experiment_finite(
+        scn,
+        seed0=seed0,
+        horizon_s=horizon_s,
+        label_suffix=label_suffix,
+    )
     write_csv_row(out_csv, agg, header_if_new=True)
+    return agg
 
+
+def run_and_save_steady(
+    scn: Scenario,
+    out_csv: str,
+    seed0: int = 1234,
+    *,
+    n_batches: int = 64,
+    jobs_per_batch: int = 1024,
+    label_suffix: str = " (steady)"
+) -> Dict[str, float]:
+    """
+    Orizzonte infinito (batch means): esegue una run lunga, divide in batch,
+    calcola media, stdev e IC al 95% sulle 64 medie di batch e scrive una riga nel CSV.
+
+    Le colonne avranno forma:
+      <serie>_mean, <serie>_stdev, <serie>_ci_low95, <serie>_ci_high95, scenario
+
+    Esempi di <serie>:
+      R_mean_s_batches, X_jobs_per_s_batches, U_A_batches, U_B_batches, U_P_batches
+    """
+    agg = run_batch_means_experiment(
+        scn,
+        seed0=seed0,
+        n_batches=n_batches,
+        jobs_per_batch=jobs_per_batch,
+        label_suffix=label_suffix,
+    )
+    write_csv_row(out_csv, agg, header_if_new=True)
     return agg

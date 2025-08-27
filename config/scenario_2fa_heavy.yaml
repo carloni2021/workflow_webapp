@@ -1,9 +1,6 @@
 # 2FA con carico +15% sugli arrivi
 name: "2FA (SCA) — heavy +15%"
 interarrival_mean_s: 3.0
-warmup_s: 1000.0
-run_s: 10000.0
-replications: 5
 heavy_load: true
 capacities:
   A: 1
