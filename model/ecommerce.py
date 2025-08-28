@@ -117,17 +117,26 @@ class EcommerceModel:
           - U_A_batches, U_B_batches, U_P_batches    (per stazione, via integrazione)
         Lo stop avviene quando TUTTE le serie hanno riempito n_batches batch.
         """
-        # inizializza batcher e stop-event
+        # Inizializza stop-event
         self._stop_event = self.env.event()
+        # Inizializza il batcher
+        # Il batcher ascolta i completamenti, chiude i batch, accumula le metriche per-batch
+        # e quando tutte le serie hanno la loro lunghezza n_batches segnala lo sto
         self._batcher = EcommerceModel._BatchMeans(self, n_batches, jobs_per_batch, self._stop_event)
 
-        # avvia arrivi e corri finché il batcher non dice "basta"
+        # Avvia processo degli arrivi
         self.env.process(self.arrival_process())
+        # Esegue fino allo stop-event
         self.env.run(until=self._stop_event)
 
-        # produce le serie per-batch
+        # Produce le serie per-batch
+        # Chiede al batcher di restituire le serie calcolate
+        # Ogni lista ha n_batches elementi.
+        # Queste liste saranno poi mediate (media, stdev, IC) dal livello “controller”
         series = self._batcher.collect_series()
-        # cleanup
+
+        # Cleanup
+        # Azzera i riferimenti interni, così il modello è riutilizzabile per altre run
         self._batcher = None
         self._stop_event = None
         return series
@@ -135,29 +144,33 @@ class EcommerceModel:
     # ---------- Recorder interno per i batch means ----------
     class _BatchMeans:
         """
-        Gestisce i batch per:
-          - GLOBAL: job completi (R_mean, X)
+        Raccoglie misure per blocchi (batch) sia:
+          - GLOBAL: sui job completi (R_mean, X)
           - STAZIONI: A, B, P (utilizzazione, mean visit time, throughput visite)
         Ogni stazione fa batch per numero di VISITE completate alla stazione.
         """
         def __init__(self, model: "EcommerceModel", n_batches: int, jobs_per_batch: int, stop_event: simpy.Event):
-            self.m = model
-            self.env = model.env
+            self.m = model      # riferimento al modello
+            self.env = model.env        # ambiente SimPy
             self.n_batches = int(n_batches)
             self.batch_size = int(jobs_per_batch)
-            self.stop_event = stop_event
+            self.stop_event = stop_event        # evento da "alzare" quando abbiamo finito
 
             # Stato per le stazioni
             self.sta_names = ["A", "B", "P"]
             self.sta = {}
             for s in self.sta_names:
-                st = getattr(self.m, s)
+                st = getattr(self.m, s)  # oggetto stazione (A/B/P)
                 self.sta[s] = {
-                    "idx": 0, "count": 0, "t0": self.env.now, "area0": st.busy_area,
-                    "sum_visit": 0.0,
-                    "U_batches": [], "visit_mean_batches": [], "X_visits_batches": [],
+                    "idx": 0,  # indice batch corrente per la stazione s
+                    "count": 0,  # visite accumulate nel batch corrente
+                    "t0": self.env.now,  # tempo di inizio batch corrente
+                    "area0": st.busy_area,  # area busy al momento di inizio batch
+                    "sum_visit": 0.0,  # somma dei tempi di visita nel batch
+                    "U_batches": [],  # lista U per-batch
+                    "visit_mean_batches": [],  # lista tempi di visita medi per-batch
+                    "X_visits_batches": [],  # lista throughput visite per-batch
                 }
-
             # Stato globale (job completi)
             self.glob = {
                 "idx": 0, "count": 0, "t0": self.env.now,
@@ -167,6 +180,11 @@ class EcommerceModel:
 
         # --- Hook: una VISITA a una stazione è completa ---
         def on_visit_complete(self, sname: str, visit_time: float):
+            """
+            Viene chiamato da A/B/P ogni volta che una visita termina
+            (in PS la “visita” coincide con il tempo di permanenza al centro, non c’è coda separata).
+            Aggiorna i contatori del batch corrente.
+            """
             s = self.sta[sname]
             st_obj: ProcessorSharingStation = getattr(self.m, sname)
 
@@ -197,6 +215,10 @@ class EcommerceModel:
 
         # --- Hook: un JOB (sistema) è completo ---
         def on_job_complete(self, job: JobRecord):
+            """
+            Chiamato una volta per job al completamento (a livello di sistema).
+            Accumula R nel batch globale corrente.
+            """
             g = self.glob
             if g["idx"] >= self.n_batches:
                 return
@@ -204,6 +226,7 @@ class EcommerceModel:
             g["sum_R"] += R
             g["count"] += 1
 
+            # Chiusura del batch globale
             if g["count"] >= self.batch_size:
                 t1 = self.env.now
                 dt = max(1e-9, t1 - g["t0"])
@@ -221,13 +244,21 @@ class EcommerceModel:
                 self._check_done()
 
         def _check_done(self):
-            # Stop quando TUTTE le serie hanno raggiunto n_batches
+            """
+            Controlla se tutte le serie hanno raggiunto n_batches.
+            (Quindi sia le serie delle tre stazioni, che la serie globale).
+            In tal caso, alza lo stop_event per terminare la run.
+            """
             sta_done = all(self.sta[s]["idx"] >= self.n_batches for s in self.sta_names)
             glob_done = (self.glob["idx"] >= self.n_batches)
             if sta_done and glob_done and not self.stop_event.triggered:
                 self.stop_event.succeed()
 
         def collect_series(self) -> Dict[str, List[float]]:
+            """
+            Raccoglie e ritorna le serie per-batch calcolate.
+            Ogni lista ha n_batches elementi.
+            """
             out: Dict[str, List[float]] = {
                 "R_mean_s_batches": self.glob["R_mean_batches"],
                 "X_jobs_per_s_batches": self.glob["X_jobs_batches"],
