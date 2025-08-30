@@ -21,6 +21,8 @@ class EcommerceModel:
         self.env = simpy.Environment()
         rng_setup.init_rng_for_replication(seed)
 
+        self.arrival_rate_override: Optional[float] = None  # <<< NEW
+
         caps = scenario.capacities
         self.A = ProcessorSharingStation(self.env, "A", caps.get("A", 1))
         self.B = ProcessorSharingStation(self.env, "B", caps.get("B", 1))
@@ -29,6 +31,10 @@ class EcommerceModel:
         self.jobs_completed: List[JobRecord] = []
         self._batcher: Optional[EcommerceModel._BatchMeans] = None
         self._stop_event: Optional[simpy.Event] = None
+
+    def set_arrival_rate(self, lam: Optional[float]):
+        """Se impostato, usa lam (req/s) al posto dello Scenario."""
+        self.arrival_rate_override = lam
 
     # ---------- Arrivi e visite ----------
     def _ps_visit(self, station: ProcessorSharingStation, sname: str, job: JobRecord, class_id: str):
@@ -71,7 +77,12 @@ class EcommerceModel:
             self._batcher.on_job_complete(job)
 
     def arrival_process(self):
-        mean_ia = self.scenario.get_interarrival_mean()
+        # Se è presente un override, usalo. Altrimenti usa lo Scenario.
+        if self.arrival_rate_override is not None and self.arrival_rate_override > 0:
+            mean_ia = 1.0 / self.arrival_rate_override
+        else:
+            mean_ia = self.scenario.get_interarrival_mean()
+
         jid = 0
         while True:
             rng_setup.use_stream("arrivals")
