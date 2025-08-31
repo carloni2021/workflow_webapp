@@ -28,7 +28,6 @@ def main() -> None:
 
     config_dir="config"
     run_phase_finite(config_dir)
-    # run_phase_steady(config_dir)ni
 
 if __name__ == "__main__":
     main()
