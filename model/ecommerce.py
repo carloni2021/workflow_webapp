@@ -205,3 +205,109 @@ class EcommerceModel:
             "U_P": U_P,
             "n_completed": len(completed),
         }
+    # ---------- Run: steady-state (batch means) ----------
+    class _BatchMeans:
+        """Raccoglie statistiche per-batch mentre la simulazione gira."""
+        def __init__(self, model: "EcommerceModel", n_batches: int, jobs_per_batch: int):
+            self.m = model
+            self.n_batches = int(n_batches)
+            self.jobs_per_batch = int(jobs_per_batch)
+
+            # stato corrente del batch
+            self.reset_batch_state()
+
+            # risultati per-batch
+            self.R_mean_s_batches: List[float] = []
+            self.X_jobs_per_s_batches: List[float] = []
+            self.U_A_batches: List[float] = []
+            self.U_B_batches: List[float] = []
+            self.U_P_batches: List[float] = []
+
+            # evento di stop per chiudere la run
+            self.done_ev = self.m.env.event()
+
+        def reset_batch_state(self) -> None:
+            self.jobs_in_batch = 0
+            self.sum_R = 0.0
+            # snapshot tempo e aree per calcolare U su ciascun batch
+            self.t0 = self.m.env.now
+            # assicura che le aree siano aggiornate prima dello snapshot
+            self.m.A._area_accumulate()
+            self.m.B._area_accumulate()
+            self.m.P._area_accumulate()
+            self.areaA0 = self.m.A.busy_area
+            self.areaB0 = self.m.B.busy_area
+            self.areaP0 = self.m.P.busy_area
+
+        def on_visit_complete(self, sname: str, soj_time: float) -> None:
+            # Non serve per questa versione (usiamo le busy_area); lasciato per estensioni future.
+            return
+
+        def on_job_complete(self, job) -> None:
+            # aggiorna R del job nel batch corrente
+            self.jobs_in_batch += 1
+            self.sum_R += (job.completion_time - job.arrival_time)
+
+            if self.jobs_in_batch >= self.jobs_per_batch:
+                # chiudi il batch e calcola le metriche
+                t1 = self.m.env.now
+                duration = max(t1 - self.t0, 1e-12)  # protezione numerica
+
+                R_mean = self.sum_R / float(self.jobs_in_batch)
+                X = float(self.jobs_in_batch) / duration
+
+                # utilizzi via differenza d'area (normalizzata per capacità)
+                self.m.A._area_accumulate()
+                self.m.B._area_accumulate()
+                self.m.P._area_accumulate()
+
+                U_A = (self.m.A.busy_area - self.areaA0) / (self.m.A.capacity * duration)
+                U_B = (self.m.B.busy_area - self.areaB0) / (self.m.B.capacity * duration)
+                U_P = (self.m.P.busy_area - self.areaP0) / (self.m.P.capacity * duration)
+
+                # salva risultati
+                self.R_mean_s_batches.append(R_mean)
+                self.X_jobs_per_s_batches.append(X)
+                self.U_A_batches.append(U_A)
+                self.U_B_batches.append(U_B)
+                self.U_P_batches.append(U_P)
+
+                # prepara il prossimo batch o termina
+                if len(self.R_mean_s_batches) >= self.n_batches:
+                    if not self.done_ev.triggered:
+                        self.done_ev.succeed()
+                else:
+                    self.reset_batch_state()
+
+    def run_batch_means(self, *, n_batches: int, jobs_per_batch: int) -> Dict[str, List[float]]:
+        """
+        Esegue la run a regime (batch means) e restituisce le serie per-batch:
+        - R_mean_s_batches:   media dei tempi di risposta per batch
+        - X_jobs_per_s_batches: throughput per batch
+        - U_A/B/P_batches:    utilizzazioni per batch
+        """
+        assert n_batches > 0 and jobs_per_batch > 0
+
+        # Imposta il tasso di arrivo dal tuo Scenario (il controller non lo setta)
+        lam = 1.0 / float(self.scenario.get_interarrival_mean())
+        self.set_arrival_rate(lam)
+
+        # batcher e avvio sorgente di arrivi
+        self._batcher = EcommerceModel._BatchMeans(self, n_batches, jobs_per_batch)
+        self.env.process(self._arrival_process())
+
+        # Esegui finché non si completano n_batches * jobs_per_batch job
+        self.env.run(until=self._batcher.done_ev)
+
+        # Confeziona il risultato atteso dal controller steady_state.py
+        series = {
+            "R_mean_s_batches": self._batcher.R_mean_s_batches,
+            "X_jobs_per_s_batches": self._batcher.X_jobs_per_s_batches,
+            "U_A_batches": self._batcher.U_A_batches,
+            "U_B_batches": self._batcher.U_B_batches,
+            "U_P_batches": self._batcher.U_P_batches,
+        }
+
+        # pulizia
+        self._batcher = None
+        return series
