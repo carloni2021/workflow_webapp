@@ -121,90 +121,136 @@ class EcommerceModel:
             self._batcher.on_job_complete(job)
 
     # ---------- Run: orizzonte finito ----------
-    def run_finite(self, *, horizon_s: float, warmup_s: float = 8000.0) -> Dict[str, float]:
+    def run_finite(self, *, horizon_s: float, warmup_s: float = 0.0, bins: int | None = None,
+                   verbose: bool = True) -> Dict:
         """
-        Esegue una replica a orizzonte finito.
-        Se warmup_s > 0, scarta il transitorio iniziale e misura solo su [warmup_s, horizon_s].
+        Esegue una run a orizzonte finito (transiente) e misura le metriche nella finestra [warmup_s, horizon_s].
+        Ritorna:
+            - R_mean_s        : tempo di risposta medio nella finestra
+            - X_jobs_per_s    : throughput (completamenti / durata finestra)
+            - U_A, U_B, U_P   : utilizzazioni medie per stazione nella finestra
+            - n_completed     : # job completati nella finestra
+            - N_mean          : stima del numero medio di utenti nel sistema via Little (X * R)
+            - N_series        : opzionale, lista di (t_centro_finestra, N_i) per studiare la convergenza
         """
-        assert horizon_s > 0 and warmup_s >= 0 and horizon_s > warmup_s
+        assert horizon_s > 0.0 and horizon_s >= warmup_s
 
-        # Avvia il processo di arrivo
+        # reset log locali per la run
+        self.jobs_completed = []
+        self._arrival_times = []
+
+        # Se non è stato impostato da fuori, usa il valore dallo Scenario
+        if self.lambda_req_s <= 0.0:
+            try:
+                lam_from_scn = 1.0 / float(self.scenario.get_interarrival_mean())
+            except Exception:
+                lam_from_scn = 1.0 / float(getattr(self.scenario, "interarrival_mean_s", 1.0))
+            self.set_arrival_rate(lam_from_scn)
+
+        # --- snapshot delle aree busy all'inizio della finestra di misura ---
+        t0 = float(warmup_s)
+        snapshot = {"t0": 0.0, "A": 0.0, "B": 0.0, "P": 0.0}
+
+        def _take_snapshot():
+            # attende il warmup e poi fotografa le aree
+            if t0 > 0.0:
+                yield self.env.timeout(t0)
+            # aggiorna le aree prima di leggerle
+            self.A._area_accumulate();
+            self.B._area_accumulate();
+            self.P._area_accumulate()
+            snapshot["t0"] = self.env.now
+            snapshot["A"] = self.A.busy_area
+            snapshot["B"] = self.B.busy_area
+            snapshot["P"] = self.P.busy_area
+
+        self.env.process(_take_snapshot())
+
+        # --- avvio processi: arrivi + (le visite sono lanciate dal flow alla creazione job) ---
         self.env.process(self._arrival_process())
 
-        # 1) Warmup (opzionale): esegui fino a warmup_s e scatta snapshot per aree busy
-        areaA0 = areaB0 = areaP0 = t0 = 0.0
-        if warmup_s > 0.0:
-            self.env.run(until=warmup_s)
-            # snapshot aree e tempo inizio finestra
-            # 🔹 FLUSH fino a t = warmup_s
-            self.A._area_accumulate()
-            self.B._area_accumulate()
-            self.P._area_accumulate()
-            # snapshot aree e tempo inizio finestra
-            areaA0, areaB0, areaP0 = self.A.busy_area, self.B.busy_area, self.P.busy_area
-            t0 = warmup_s
-            # azzera l'elenco dei job completati per misurare solo quelli che terminano dopo il warmup
-            self.jobs_completed = []
-        else:
-            t0 = 0.0
-
-        # 2) Misura: esegui fino all'orizzonte finale
+        # --- run fino all'orizzonte ---
         self.env.run(until=horizon_s)
-        self.A._area_accumulate()
-        self.B._area_accumulate()
+
+        # --- misure nella finestra [t0, horizon] ---
+        # finalizza integrazione delle aree al tempo corrente
+        self.A._area_accumulate();
+        self.B._area_accumulate();
         self.P._area_accumulate()
 
-        # 3) Calcolo metriche SOLO sulla finestra [t0, horizon_s]
-        duration = horizon_s - t0
+        t_start = snapshot["t0"]
+        t_end = float(horizon_s)
+        duration = max(t_end - t_start, 1e-12)
 
-        # Stima del tasso di arrivo (per debug)
-        arrivals_in = sum(t0 <= t < horizon_s for t in self._arrival_times)
-        lambda_hat = arrivals_in / duration if duration > 0 else float("nan")
-        print(f"[CHECK] lambda_set={self.lambda_req_s:.3f}  lambda_hat={lambda_hat:.3f}  "
-              f"arrivals_in={arrivals_in}  duration={duration:.0f}s")
-
-        completed = list(self.jobs_completed)
-
-        # Utilizzazioni: integrazione differenziale delle aree busy nella finestra
-        if warmup_s > 0.0:
-            U_A = (self.A.busy_area - areaA0) / (self.A.capacity * duration) if duration > 0 else float("nan")
-            U_B = (self.B.busy_area - areaB0) / (self.B.capacity * duration) if duration > 0 else float("nan")
-            U_P = (self.P.busy_area - areaP0) / (self.P.capacity * duration) if duration > 0 else float("nan")
-        else:
-            U_A = self.A.utilization(horizon_s)
-            U_B = self.B.utilization(horizon_s)
-            U_P = self.P.utilization(horizon_s)
-
-        # Tempi di risposta e throughput sulla finestra
-        completed = [j for j in self.jobs_completed if j.arrival_time >= t0]
-        R = [j.completion_time - j.arrival_time for j in completed]
-        R_mean = stats.mean(R) if R else float("nan")
+        # Completamenti nella finestra
+        completed = [j for j in self.jobs_completed if (t_start <= j.completion_time <= t_end)]
+        R = [(j.completion_time - j.arrival_time) for j in completed if j.arrival_time >= t_start]
+        R_mean = (stats.mean(R) if R else float("nan"))
         X = (len(completed) / duration) if duration > 0 else float("nan")
-        print(f"[DEBUG R] t0={t0}  horizon={horizon_s}  duration={duration}  completed={len(completed)}")
-        if completed:
-            r0 = completed[0].completion_time - max(completed[0].arrival_time, t0)
+
+        # Stima del tasso d'arrivo osservato nella finestra
+        arrivals_in = sum((t_start <= t <= t_end) for t in self._arrival_times)
+        lambda_hat = arrivals_in / duration if duration > 0 else float("nan")
+        lambda_set = float(self.lambda_req_s)
+
+        if verbose:
             print(
-                f"[DEBUG R] first R in window = {r0:.4f}s (comp={completed[0].completion_time:.2f}, arr={completed[0].arrival_time:.2f})")
-        print(
-            f"[DEBUG U] areas ΔA={self.A.busy_area - areaA0 if warmup_s > 0 else self.A.busy_area:.2f}  ΔB={self.B.busy_area - areaB0 if warmup_s > 0 else self.B.busy_area:.2f}  ΔP={self.P.busy_area - areaP0 if warmup_s > 0 else self.P.busy_area:.2f}")
+                f"[CHECK] lambda_set={lambda_set:.3f}  lambda_hat={lambda_hat:.3f}  arrivals_in={arrivals_in}  duration={int(duration)}s")
+            print(f"[DEBUG R] t0={t_start}  horizon={t_end}  duration={duration}  completed={len(completed)}")
+            if R:
+                j0 = min(completed, key=lambda j: j.completion_time)
+                print(
+                    f"[DEBUG R] first R in window = {j0.completion_time - j0.arrival_time:.4f}s (comp={j0.completion_time:.2f}, arr={j0.arrival_time:.2f})")
 
-        # --- sanity check di coerenza carico/utilizzo ---
-        lam = getattr(self, "lambda_req_s", float("nan"))
-        D = {"A": 0.7, "B": 0.8, "P": 0.4}  # dal tuo YAML 1FA (base)
-        U_expected = {s: lam * D[s] for s in D}
+        # Utilizzazioni: differenza d'area / (capacity * durata) nella finestra
+        dA = self.A.busy_area - snapshot["A"]
+        dB = self.B.busy_area - snapshot["B"]
+        dP = self.P.busy_area - snapshot["P"]
+        U_A = dA / (self.A.capacity * duration)
+        U_B = dB / (self.B.capacity * duration)
+        U_P = dP / (self.P.capacity * duration)
 
-        print(f"[CHECK] λ={lam:.3f}  U_atteso: A={U_expected['A']:.3f}  "
-              f"B={U_expected['B']:.3f}  P={U_expected['P']:.3f}")
-        print(f"[CHECK] U_misurato: A={U_A:.3f}  B={U_B:.3f}  P={U_P:.3f}")
+        if verbose:
+            print(f"[DEBUG U] areas ΔA={dA:.2f}  ΔB={dB:.2f}  ΔP={dP:.2f}")
+            # Check teorico (hard-coded per il tuo 1FA base; cambia se usi altri YAML)
+            D = {"A": 0.7, "B": 0.8, "P": 0.4}
+            U_expected = {s: lambda_set * D[s] for s in D}
+            print(
+                f"[CHECK] λ={lambda_set:.3f}  U_atteso: A={U_expected['A']:.3f}  B={U_expected['B']:.3f}  P={U_expected['P']:.3f}")
+            print(f"[CHECK] U_misurato: A={U_A:.3f}  B={U_B:.3f}  P={U_P:.3f}")
 
-        return {
+        # Stima L = λ W (numero medio di utenti nel sistema)
+        N_mean = (X * R_mean) if (R_mean == R_mean and X == X) else float("nan")
+
+        out = {
             "R_mean_s": R_mean,
             "X_jobs_per_s": X,
-            "U_A": U_A,
-            "U_B": U_B,
-            "U_P": U_P,
+            "U_A": U_A, "U_B": U_B, "U_P": U_P,
             "n_completed": len(completed),
+            "N_mean": N_mean,
         }
+
+        # Serie su K finestre per studiare convergenza della stima N(t)
+        if bins and bins > 0:
+            width = (t_end - t_start) / bins
+            N_series = []
+            for b in range(bins):
+                w0 = t_start + b * width
+                w1 = w0 + width
+                # arrivi nella finestra
+                arr_in = sum((w0 <= t < w1) for t in self._arrival_times)
+                lam_i = arr_in / width if width > 0 else float("nan")
+                # completamenti con arrivo nella finestra e completamento entro la finestra
+                comp_bin = [j for j in self.jobs_completed if (w0 <= j.arrival_time < w1) and (j.completion_time <= w1)]
+                R_i = [j.completion_time - j.arrival_time for j in comp_bin]
+                Rm_i = (stats.mean(R_i) if R_i else float("nan"))
+                X_i = (len(comp_bin) / width) if width > 0 else float("nan")
+                N_i = (X_i * Rm_i) if (Rm_i == Rm_i and X_i == X_i) else float("nan")
+                N_series.append((0.5 * (w0 + w1), N_i))
+            out["N_series"] = N_series
+
+        return out
+
     # ---------- Run: steady-state (batch means) ----------
     class _BatchMeans:
         """Raccoglie statistiche per-batch mentre la simulazione gira."""
