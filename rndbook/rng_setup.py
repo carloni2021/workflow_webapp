@@ -6,9 +6,9 @@ from .rngs import plantSeeds, selectStream  # multi-stream RNG 0..255
 # Mappa simbolica → indice stream (personalizzabile)
 STREAMS: Dict[str, int] = {
     "arrivals": 0,
-    # "service_A": 1,
-    # "service_B": 2,
-    # "service_P": 3,
+    "service_A": 1,
+    "service_B": 2,
+    "service_P": 3,
     # Altri stream possono essere aggiunti qui
 }
 

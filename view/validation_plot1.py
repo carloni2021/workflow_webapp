@@ -8,8 +8,8 @@ def run_replications_for_lambda(
     scn,
     lam,
     lam_index,
-    n_reps=15,
-    measure_s=86400,  # 1 giorno
+    n_reps=1,
+    measure_s=20000,  # 1 giorno
     warmup_s=8000,
     seed0=1234,
     min_completed=100

@@ -99,59 +99,112 @@ class ProcessorSharingStation:
 
         return ev
 
+
     def _run_ps_loop(self):
-        """
-        Planner PS: aggiorna i residui e decide se avviene prima un completamento o un nuovo arrivo.
-        """
         last_rates_update = self.env.now
 
-        # ---- Loop ----
         while self.active:
-            n = len(self.active)  # Numero di job attivi
+            # Snapshot dei job già presenti PRIMA di attendere il prossimo evento
+            cohort = list(self.active)                   # <-- solo questi ricevono servizio nell'intervallo
+            n = len(cohort)
 
-            # Regola PS (rate per job)
             rate_per_job = 1.0 if n <= self.capacity else self.capacity / n
-
-            # Tempo fino al primo completamento a rate costante
-            min_remaining = min(t.remaining for t in self.active)
+            min_remaining = min(t.remaining for t in cohort)
             dt_to_finish = min_remaining / rate_per_job if rate_per_job > 0 else float("inf")
 
-            # Attendo il minimo tra: completamento previsto, nuovo arrivo
             timeout_ev = self.env.timeout(dt_to_finish)
             self._arrival_ev = self.env.event()
             res = yield simpy.AnyOf(self.env, [timeout_ev, self._arrival_ev])
 
-            # Aggiorna i residui per il tempo trascorso
+            # Aggiorna i residui SOLO dei job che erano già nel cohort
             elapsed = self.env.now - last_rates_update
-            for t in self.active:
+            for t in cohort:
                 t.remaining = max(0.0, t.remaining - elapsed * rate_per_job)
-                # Clamp numerico: tratta come 0 i residui molto piccoli
                 if t.remaining <= self.TOL:
                     t.remaining = 0.0
             last_rates_update = self.env.now
 
             if timeout_ev in res.events:
-                # Caso Completamento
-                self._area_accumulate()  # Integra l'utilizzo fino a ORA
+                # Completamento: integra area e completa proprio quel token
+                self._area_accumulate()
 
-                # Selezione robusta del job completato:
-                # 1) prova con la soglia di tolleranza
-                # 2) altrimenti prendi quello col residuo minimo (doveva finire ora)
                 try:
-                    idx = next(i for i, tok in enumerate(self.active) if tok.remaining <= self.TOL)
+                    done_tok = next(t for t in cohort if t.remaining <= self.TOL)
                 except StopIteration:
-                    idx = min(range(len(self.active)), key=lambda i: self.active[i].remaining)
-                    # opzionale: azzera per coerenza
-                    self.active[idx].remaining = 0.0
+                    done_tok = min(cohort, key=lambda t: t.remaining)
+                    done_tok.remaining = 0.0
 
-                done_tok = self.active.pop(idx)
+                # Rimuovi per identità dall'attuale lista active (potrebbe avere nuovi arrivi)
+                try:
+                    self.active.remove(done_tok)
+                except ValueError:
+                    # fallback robusto, non dovrebbe servire
+                    idx = min(range(len(self.active)), key=lambda i: self.active[i].remaining)
+                    done_tok = self.active.pop(idx)
+
                 self._recompute_busy()
                 done_tok.done_ev.succeed()
             else:
-                # Caso Nuovo arrivo: nessun completamento in questo step
+                # Nuovo arrivo: nessun completamento in questo step
                 pass
 
-        # Quando non ci sono più job attivi
         self._area_accumulate()
         self._recompute_busy()
         self._scheduler_running = False
+
+#    def _run_ps_loop(self):
+#        """
+#        Planner PS: aggiorna i residui e decide se avviene prima un completamento o un nuovo arrivo.
+#        """
+#        last_rates_update = self.env.now
+#
+#        # ---- Loop ----
+#        while self.active:
+#            n = len(self.active)  # Numero di job attivi
+#
+#            # Regola PS (rate per job)
+#            rate_per_job = 1.0 if n <= self.capacity else self.capacity / n
+#
+#            # Tempo fino al primo completamento a rate costante
+#            min_remaining = min(t.remaining for t in self.active)
+#            dt_to_finish = min_remaining / rate_per_job if rate_per_job > 0 else float("inf")
+#
+#            # Attendo il minimo tra: completamento previsto, nuovo arrivo
+#            timeout_ev = self.env.timeout(dt_to_finish)
+#            self._arrival_ev = self.env.event()
+#            res = yield simpy.AnyOf(self.env, [timeout_ev, self._arrival_ev])
+#
+#            # Aggiorna i residui per il tempo trascorso
+#            elapsed = self.env.now - last_rates_update
+#            for t in self.active:
+#                t.remaining = max(0.0, t.remaining - elapsed * rate_per_job)
+#                # Clamp numerico: tratta come 0 i residui molto piccoli
+#                if t.remaining <= self.TOL:
+#                    t.remaining = 0.0
+#            last_rates_update = self.env.now
+#
+#            if timeout_ev in res.events:
+#                # Caso Completamento
+#                self._area_accumulate()  # Integra l'utilizzo fino a ORA
+#
+#                # Selezione robusta del job completato:
+#                # 1) prova con la soglia di tolleranza
+#                # 2) altrimenti prendi quello col residuo minimo (doveva finire ora)
+#                try:
+#                    idx = next(i for i, tok in enumerate(self.active) if tok.remaining <= self.TOL)
+#                except StopIteration:
+#                    idx = min(range(len(self.active)), key=lambda i: self.active[i].remaining)
+#                    # opzionale: azzera per coerenza
+#                    self.active[idx].remaining = 0.0
+#
+#                done_tok = self.active.pop(idx)
+#                self._recompute_busy()
+#                done_tok.done_ev.succeed()
+#            else:
+#                # Caso Nuovo arrivo: nessun completamento in questo step
+#                pass
+#
+#        # Quando non ci sono più job attivi
+#        self._area_accumulate()
+#        self._recompute_busy()
+#        self._scheduler_running = False

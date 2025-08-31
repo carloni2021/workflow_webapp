@@ -1,8 +1,9 @@
-import rndbook.rvgs as rvgs
-import rndbook.rng_setup as rng_setup
 import simpy
 from typing import Dict, List, Optional
 import statistics as stats
+
+from rndbook.rng_setup import init_rng_for_replication, use_stream
+from rndbook.rvgs import Exponential
 
 from model.scenario import Scenario
 from model.entities import JobRecord
@@ -16,14 +17,19 @@ class EcommerceModel:
       - run_steady(...)              : orizzonte infinito (batch means) con 64×1024 di default
     """
 
-    def __init__(self, scenario: Scenario, seed: int = 42):
-        self.scenario = scenario
+    def __init__(self, scn: Scenario, seed: int = 1234):
+
+        self._arrival_times = [] # log arrivi per debug
+
+        self.scenario = scn
         self.env = simpy.Environment()
-        rng_setup.init_rng_for_replication(seed)
+        self.seed = int(seed)
 
-        self.arrival_rate_override: Optional[float] = None  # <<< NEW
+        init_rng_for_replication(self.seed) # Inizializza RNG (tutti i 256 stream) per la replica
 
-        caps = scenario.capacities
+        self.lambda_req_s = 0.0 # tasso di arrivo (req/s) - inizializzato a 0, va settato con set_arrival_rate() nello sweep
+
+        caps = self.scenario.capacities
         self.A = ProcessorSharingStation(self.env, "A", caps.get("A", 1))
         self.B = ProcessorSharingStation(self.env, "B", caps.get("B", 1))
         self.P = ProcessorSharingStation(self.env, "P", caps.get("P", 1))
@@ -34,7 +40,37 @@ class EcommerceModel:
 
     def set_arrival_rate(self, lam: Optional[float]):
         """Se impostato, usa lam (req/s) al posto dello Scenario."""
-        self.arrival_rate_override = lam
+        """Usata dallo: basta aggiornare il tasso"""
+        self.lambda_req_s = max(0.0, float(lam))
+
+    def _arrival_process(self):
+
+        jid = 0
+        while True:
+            lam = self.lambda_req_s
+            if lam <= 0.0:
+                # niente arrivi (protezione)
+                yield self.env.timeout(1.0)
+                continue
+
+            mean_iat = 1.0 / lam
+            use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
+            iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
+            yield self.env.timeout(iat)
+            self._arrival_times.append(self.env.now)  # LOG dell’arrivo reale
+
+            # avvia il workflow della nuova richiesta
+            jid += 1
+            self.env.process(self.job_flow(jid))
+
+
+    def _exp_demand(self, station: str, job_class: str) -> float:
+
+        mean = float(self.scenario.service_demands.get(station, {}).get(job_class, 0.0))
+        if mean <= 0.0:
+            return 0.0
+        use_stream(f"service_{station}")  # es.: service_A/B/P in rng_setup.STREAMS
+        return Exponential(mean)
 
     # ---------- Arrivi e visite ----------
     def _ps_visit(self, station: ProcessorSharingStation, sname: str, job: JobRecord, class_id: str):
@@ -43,32 +79,13 @@ class EcommerceModel:
         campiona Exp(mean = D_s) dove D_s è nello Scenario per (stazione, class_id).
         Lo switch di stream RNG è "safe": se lo stream dedicato non esiste, ripiega.
         """
-        mean_D = self.scenario.service_demands[sname][class_id]
-        if mean_D <= 0.0:
+        d = self._exp_demand(sname, class_id)  # campione esponenziale
+        if d <= 0.0:
             return
-
-        # --- Stream RNG: prova con uno dedicato, altrimenti ripiega su "services", altrimenti lascia com'è ---
-        stream_name = f"svc_{sname}_{class_id}"
-        try:
-            rng_setup.use_stream(stream_name)
-        except Exception:
-            # ripiego comune a tutti i servizi (se definito nel tuo rng_setup)
-            try:
-                rng_setup.use_stream("services")
-            except Exception:
-                # opzionale: ultimo tentativo con "service"
-                try:
-                    rng_setup.use_stream("service")
-                except Exception:
-                    # nessuno stream disponibile: non cambiamo stream per evitare KeyError
-                    pass
-
-        # Campionamento domanda di servizio (Exp con media D_s)
-        demand = rvgs.Exponential(mean_D)
 
         # Esecuzione PS
         t_in = self.env.now
-        done = station.ps_service(demand)
+        done = station.ps_service(d)
         yield done
         t_out = self.env.now
 
@@ -103,23 +120,6 @@ class EcommerceModel:
         if self._batcher is not None:
             self._batcher.on_job_complete(job)
 
-    def arrival_process(self):
-        # Se è presente un override, usalo. Altrimenti usa lo Scenario.
-        if self.arrival_rate_override is not None and self.arrival_rate_override > 0:
-            mean_ia = 1.0 / self.arrival_rate_override
-        else:
-            mean_ia = self.scenario.get_interarrival_mean()
-
-        print("arrival_rate_override: " + str(self.arrival_rate_override) + ", mean_ia:  " + str(mean_ia))
-
-        jid = 0
-        while True:
-            rng_setup.use_stream("arrivals")
-            ia = rvgs.Exponential(mean_ia) if mean_ia > 0 else float("inf")
-            yield self.env.timeout(ia)
-            jid += 1
-            self.env.process(self.job_flow(jid))
-
     # ---------- Run: orizzonte finito ----------
     def run_finite(self, *, horizon_s: float, warmup_s: float = 8000.0) -> Dict[str, float]:
         """
@@ -129,12 +129,17 @@ class EcommerceModel:
         assert horizon_s > 0 and warmup_s >= 0 and horizon_s > warmup_s
 
         # Avvia il processo di arrivo
-        self.env.process(self.arrival_process())
+        self.env.process(self._arrival_process())
 
         # 1) Warmup (opzionale): esegui fino a warmup_s e scatta snapshot per aree busy
         areaA0 = areaB0 = areaP0 = t0 = 0.0
         if warmup_s > 0.0:
             self.env.run(until=warmup_s)
+            # snapshot aree e tempo inizio finestra
+            # 🔹 FLUSH fino a t = warmup_s
+            self.A._area_accumulate()
+            self.B._area_accumulate()
+            self.P._area_accumulate()
             # snapshot aree e tempo inizio finestra
             areaA0, areaB0, areaP0 = self.A.busy_area, self.B.busy_area, self.P.busy_area
             t0 = warmup_s
@@ -145,9 +150,19 @@ class EcommerceModel:
 
         # 2) Misura: esegui fino all'orizzonte finale
         self.env.run(until=horizon_s)
+        self.A._area_accumulate()
+        self.B._area_accumulate()
+        self.P._area_accumulate()
 
         # 3) Calcolo metriche SOLO sulla finestra [t0, horizon_s]
         duration = horizon_s - t0
+
+        # Stima del tasso di arrivo (per debug)
+        arrivals_in = sum(t0 <= t < horizon_s for t in self._arrival_times)
+        lambda_hat = arrivals_in / duration if duration > 0 else float("nan")
+        print(f"[CHECK] lambda_set={self.lambda_req_s:.3f}  lambda_hat={lambda_hat:.3f}  "
+              f"arrivals_in={arrivals_in}  duration={duration:.0f}s")
+
         completed = list(self.jobs_completed)
 
         # Utilizzazioni: integrazione differenziale delle aree busy nella finestra
@@ -161,6 +176,7 @@ class EcommerceModel:
             U_P = self.P.utilization(horizon_s)
 
         # Tempi di risposta e throughput sulla finestra
+        completed = [j for j in self.jobs_completed if j.arrival_time >= t0]
         R = [j.completion_time - j.arrival_time for j in completed]
         R_mean = stats.mean(R) if R else float("nan")
         X = (len(completed) / duration) if duration > 0 else float("nan")
@@ -172,6 +188,15 @@ class EcommerceModel:
         print(
             f"[DEBUG U] areas ΔA={self.A.busy_area - areaA0 if warmup_s > 0 else self.A.busy_area:.2f}  ΔB={self.B.busy_area - areaB0 if warmup_s > 0 else self.B.busy_area:.2f}  ΔP={self.P.busy_area - areaP0 if warmup_s > 0 else self.P.busy_area:.2f}")
 
+        # --- sanity check di coerenza carico/utilizzo ---
+        lam = getattr(self, "lambda_req_s", float("nan"))
+        D = {"A": 0.7, "B": 0.8, "P": 0.4}  # dal tuo YAML 1FA (base)
+        U_expected = {s: lam * D[s] for s in D}
+
+        print(f"[CHECK] λ={lam:.3f}  U_atteso: A={U_expected['A']:.3f}  "
+              f"B={U_expected['B']:.3f}  P={U_expected['P']:.3f}")
+        print(f"[CHECK] U_misurato: A={U_A:.3f}  B={U_B:.3f}  P={U_P:.3f}")
+
         return {
             "R_mean_s": R_mean,
             "X_jobs_per_s": X,
@@ -180,127 +205,3 @@ class EcommerceModel:
             "U_P": U_P,
             "n_completed": len(completed),
         }
-
-    # ---------- Run: orizzonte inffinito (batch means) ----------
-    def run_batch_means(self, *, n_batches: int = 64, jobs_per_batch: int = 1024) -> Dict[str, List[float]]:
-        """
-        Esegue UNA run lunga, divisa in batch per NUMERO DI JOB (o visite),
-        e ritorna le SERIE per-batch delle metriche:
-          - R_mean_s_batches, X_jobs_per_s_batches  (globali per job)
-          - U_A_batches, U_B_batches, U_P_batches    (per stazione, via integrazione)
-        Lo stop avviene quando TUTTE le serie hanno riempito n_batches batch.
-        """
-        # Inizializza stop-event
-        self._stop_event = self.env.event()
-        # Inizializza il batcher
-        self._batcher = EcommerceModel._BatchMeans(self, n_batches, jobs_per_batch, self._stop_event)
-
-        # Avvia processo degli arrivi
-        self.env.process(self.arrival_process())
-        # Esegue fino allo stop-event
-        self.env.run(until=self._stop_event)
-
-        # Serie per-batch
-        series = self._batcher.collect_series()
-
-        # Cleanup
-        self._batcher = None
-        self._stop_event = None
-        return series
-
-    # ---------- Recorder interno per i batch means ----------
-    class _BatchMeans:
-        def __init__(self, model: "EcommerceModel", n_batches: int, jobs_per_batch: int, stop_event: simpy.Event):
-            self.m = model
-            self.env = model.env
-            self.n_batches = int(n_batches)
-            self.batch_size = int(jobs_per_batch)
-            self.stop_event = stop_event
-
-            # Stato per le stazioni
-            self.sta_names = ["A", "B", "P"]
-            self.sta = {}
-            for s in self.sta_names:
-                st = getattr(self.m, s)
-                self.sta[s] = {
-                    "idx": 0,
-                    "count": 0,
-                    "t0": self.env.now,
-                    "area0": st.busy_area,
-                    "sum_visit": 0.0,
-                    "U_batches": [],
-                    "visit_mean_batches": [],
-                    "X_visits_batches": [],
-                }
-            # Stato globale (job completi)
-            self.glob = {
-                "idx": 0, "count": 0, "t0": self.env.now,
-                "sum_R": 0.0,
-                "R_mean_batches": [], "X_jobs_batches": [],
-            }
-
-        def on_visit_complete(self, sname: str, visit_time: float):
-            s = self.sta[sname]
-            st_obj: ProcessorSharingStation = getattr(self.m, sname)
-
-            s["sum_visit"] += visit_time
-            s["count"] += 1
-
-            if s["count"] >= self.batch_size and s["idx"] < self.n_batches:
-                t1 = self.env.now
-                dt = max(1e-9, t1 - s["t0"])
-                util = (st_obj.busy_area - s["area0"]) / (st_obj.capacity * dt)
-                mean_visit = s["sum_visit"] / s["count"]
-                x_vis = s["count"] / dt
-
-                s["U_batches"].append(util)
-                s["visit_mean_batches"].append(mean_visit)
-                s["X_visits_batches"].append(x_vis)
-
-                s["idx"] += 1
-                s["count"] = 0
-                s["t0"] = t1
-                s["area0"] = st_obj.busy_area
-                s["sum_visit"] = 0.0
-
-                self._check_done()
-
-        def on_job_complete(self, job: JobRecord):
-            g = self.glob
-            if g["idx"] >= self.n_batches:
-                return
-            R = job.completion_time - job.arrival_time
-            g["sum_R"] += R
-            g["count"] += 1
-
-            if g["count"] >= self.batch_size:
-                t1 = self.env.now
-                dt = max(1e-9, t1 - g["t0"])
-                R_mean = g["sum_R"] / g["count"]
-                X_jobs = g["count"] / dt
-
-                g["R_mean_batches"].append(R_mean)
-                g["X_jobs_batches"].append(X_jobs)
-
-                g["idx"] += 1
-                g["count"] = 0
-                g["t0"] = t1
-                g["sum_R"] = 0.0
-
-                self._check_done()
-
-        def _check_done(self):
-            sta_done = all(self.sta[s]["idx"] >= self.n_batches for s in self.sta_names)
-            glob_done = (self.glob["idx"] >= self.n_batches)
-            if sta_done and glob_done and not self.stop_event.triggered:
-                self.stop_event.succeed()
-
-        def collect_series(self) -> Dict[str, List[float]]:
-            out: Dict[str, List[float]] = {
-                "R_mean_s_batches": self.glob["R_mean_batches"],
-                "X_jobs_per_s_batches": self.glob["X_jobs_batches"],
-                "U_A_batches": self.sta["A"]["U_batches"],
-                "U_B_batches": self.sta["B"]["U_batches"],
-                "U_P_batches": self.sta["P"]["U_batches"],
-            }
-            return out
