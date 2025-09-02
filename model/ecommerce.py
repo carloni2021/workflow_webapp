@@ -230,6 +230,41 @@ class EcommerceModel:
             "N_mean": N_mean,
         }
 
+        # --- Serie R(t): cumulativa e per-bin per analizzare il warmup ---
+        if bins and bins > 0:
+            # 1) Media cumulativa del tempo di risposta in funzione del tempo di completamento
+            jobs_sorted = sorted(self.jobs_completed, key=lambda j: j.completion_time)
+            R_series_cum = []
+            s = 0.0
+            n = 0
+            for j in jobs_sorted:
+                # consideriamo solo i job "puri" della finestra di misura
+                if not (t_start <= j.completion_time <= t_end):
+                    continue
+                if j.arrival_time < t_start:
+                    continue
+                n += 1
+                s += (j.completion_time - j.arrival_time)
+                R_series_cum.append((j.completion_time, s / n))
+            out["R_series_cum"] = R_series_cum
+
+            # 2) Media per bin temporali adiacenti nella finestra [t_start, t_end]
+            width = (t_end - t_start) / bins
+            R_series_bin = []
+            for b in range(bins):
+                w0 = t_start + b * width
+                w1 = w0 + width
+                # completamenti che chiudono nel bin e con arrivo dopo l'inizio finestra
+                comp_bin = [
+                    j for j in self.jobs_completed
+                    if (w0 <= j.completion_time <= w1) and (j.arrival_time >= t_start)
+                ]
+                R_i = [j.completion_time - j.arrival_time for j in comp_bin]
+                Rm_i = (stats.mean(R_i) if R_i else float("nan"))
+                R_series_bin.append((0.5 * (w0 + w1), Rm_i))
+            out["R_series_bin"] = R_series_bin
+
+
         # Serie su K finestre per studiare convergenza della stima N(t)
         if bins and bins > 0:
             width = (t_end - t_start) / bins
