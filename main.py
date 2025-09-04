@@ -175,6 +175,8 @@ def run_phase_steady(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
 
 
 # ------------------------------- ENTRYPOINT ----------------------------------
+#commento per evitare questa funzione
+''' 
 def _choose_mode_via_io() -> tuple[str, str]:
 
     parser = argparse.ArgumentParser(description="Selezione della fase da eseguire")
@@ -193,19 +195,19 @@ def _choose_mode_via_io() -> tuple[str, str]:
 
     # Default non interattivo
     return "finite", args.config
-
+'''
 
 def main() -> None:
-    mode, config_dir = _choose_mode_via_io()
+    config_dir=DEFAULT_CONFIG_DIR
+    mode="finite"
     print(f"[INFO] modalità={mode} | config_dir={config_dir}")
 
-    #if mode == "steady":
-    #    run_phase_steady(config_dir=config_dir)
-    #else:
-    #    run_phase_finite(config_dir=config_dir)
-
-    run_phase_finite(config_dir=config_dir)
+    if mode == "steady":
+        run_phase_steady(config_dir=config_dir)
+    else:
+        run_phase_finite(config_dir=config_dir)
 
 
+#init
 if __name__ == "__main__":
     main()

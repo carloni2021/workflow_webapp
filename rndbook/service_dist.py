@@ -24,7 +24,7 @@ from typing import Tuple
 import math
 
 # Primitive RNG dal progetto
-from rvgs import Erlang, Lognormal
+from rndbook.rvgs import Erlang, Lognormal
 
 
 # ---------- Helper: Erlang-k ----------

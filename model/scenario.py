@@ -15,6 +15,11 @@ import yaml
 class Scenario:
     name: str
     service_demands: Dict[str, Dict[str, float]]
+    arrival_process: str
+    #rappresenta le distribuzioni dei server in questo modo service_dist:A: "exp" B: "exp" P: "exp"
+    service_dist: Dict[str, str] = field(default_factory=lambda: {"A": "exp", "B": "exp", "P": "exp"})
+
+    type: str = "tutto_exp"  # "tutto_exp" o "realistico"
     capacities: Dict[str, int] = field(default_factory=lambda: {"A": 1, "B": 1, "P": 1})
     interarrival_mean_s: float = 3.0
     run_s: float = 10000.0

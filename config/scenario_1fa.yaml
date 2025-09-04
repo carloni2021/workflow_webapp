@@ -1,4 +1,9 @@
 name: "1FA (base)"
+arrival_process: "exp"
+service_dist:
+    A: "exp"
+    B: "exp"
+    P: "exp"
 interarrival_mean_s: 3.0
 heavy_load: false
 capacities:

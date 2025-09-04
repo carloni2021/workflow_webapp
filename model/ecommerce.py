@@ -1,6 +1,7 @@
 import simpy
 from typing import Dict, List, Optional
 import statistics as stats
+from rndbook import service_dist
 
 from rndbook.rng_setup import init_rng_for_replication, use_stream
 from rndbook.rvgs import Exponential
@@ -57,14 +58,18 @@ class EcommerceModel:
             mean_iat = 1.0 / lam
             use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
             # iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
-            iat = HyperExp2Balanced(mean_iat, p=0.10)
+            if self.scenario.arrival_process == "exp":
+                iat = Exponential(mean_iat)
+            elif self.scenario.arrival_process == "hyperexp":
+                iat = HyperExp2Balanced(mean_iat, p=0.10)
+            else:
+                raise ValueError(f"arrival_kind non supportato: {self.arrival_process}")
             yield self.env.timeout(iat)
             self._arrival_times.append(self.env.now)  # LOG dell’arrivo reale
 
             # avvia il workflow della nuova richiesta
             jid += 1
             self.env.process(self.job_flow(jid))
-
 
     def _exp_demand(self, station: str, job_class: str) -> float:
 
@@ -81,7 +86,30 @@ class EcommerceModel:
         campiona Exp(mean = D_s) dove D_s è nello Scenario per (stazione, class_id).
         Lo switch di stream RNG è "safe": se lo stream dedicato non esiste, ripiega.
         """
-        d = self._exp_demand(sname, class_id)  # campione esponenziale
+        kindA=self.scenario.service_dist.get("A")
+        kindB=self.scenario.service_dist.get("B")
+        kindP=self.scenario.service_dist.get("P")
+        d=0.0;
+
+        if sname=="A":
+            if kindA == "exp":
+                d = self._exp_demand(sname, class_id)
+            elif kindA == "erlang":
+                mean = float(self.scenario.service_demands.get(station, {}).get(class_id, 0.0))
+                d = service_dist.demand_erlang(mean,3)
+
+        if sname=="B":
+            if kindB == "exp":
+                d = self._exp_demand(sname, class_id)
+            elif kindB == "lognorm":
+                mean = float(self.scenario.service_demands.get(station, {}).get(class_id, 0.0))
+                d = service_dist.demand_lognormal(mean,3)
+        if sname=="P":
+            if kindP == "exp":
+                d = self._exp_demand(sname, class_id)
+            elif kindP == "erlang":
+                mean = float(self.scenario.service_demands.get(station, {}).get(class_id, 0.0))
+                d = service_dist.demand_erlang(mean,3)
         if d <= 0.0:
             return
 
