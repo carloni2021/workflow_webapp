@@ -81,26 +81,27 @@ def run_phase_finite(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
     for path in yaml_files:
         scn = Scenario.from_yaml(str(path))
         print(f"[FINITE] Sweep λ | scenario: {scn.name}")
-#
-        ## Plot R(λ) (come già facevi)
-        #sweep_response_vs_lambda(
-        #    scn,
-        #    lam_start=0.5, lam_end=1.2, lam_step=0.05,
-        #    seed0=SEED0,
-        #)
-#
-        ## Plot N(λ) = X·R (nuovo)
-        #sweep_users_vs_lambda(
-        #    scn,
-        #    lam_start=0.5, lam_end=1.2, lam_step=0.05,
-        #    n_reps=15,               # come nel tuo plot R(λ)
-        #    measure_s=86_400.0,      # 1 giorno di misura
-        #    warmup_s=8_000.0,        # warmup
-        #    seed0=SEED0,
-        #    outdir="out", save_png=True, save_csv=False, show=False,
-        #)#
-        ## Plot R(t) vs tempo per stimare warmup (1 run per λ)
-        #print("[USO] warmup — R(t) vs tempo (1 run per λ)")
+
+        # Plot R(λ) (come già facevi)
+        sweep_response_vs_lambda(
+            scn,
+            lam_start=0.5, lam_end=1.2, lam_step=0.05,
+            seed0=SEED0,
+        )
+
+        # Plot N(λ) = X·R (nuovo)
+        sweep_users_vs_lambda(
+            scn,
+            #DA MODIFICARE!
+            lam_start=0.5, lam_end=1.2, lam_step=0.05,
+            n_reps=15,               # come nel tuo plot R(λ)
+            measure_s=86_400.0,      # 1 giorno di misura
+            warmup_s=8_000.0,        # warmup
+            seed0=SEED0,
+            outdir="out", save_png=True, save_csv=False, show=False,
+        )#
+        # Plot R(t) vs tempo per stimare warmup (1 run per λ)
+        print("[USO] warmup — R(t) vs tempo (1 run per λ)")
         _run_warmup_plots_for_scenario(
             scn,
             lam_start=0.33, lam_end=0.33, lam_step=0.33,

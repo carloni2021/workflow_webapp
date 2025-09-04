@@ -120,6 +120,32 @@ class EcommerceModel:
         if self._batcher is not None:
             self._batcher.on_job_complete(job)
 
+    def run_batch_means_R(self, *, n_batches: int, jobs_per_batch: int) -> Dict[str, List[float]]:
+        """
+        Esegue la run a regime (batch means) e restituisce
+        solo le medie del tempo di risposta per batch.
+        """
+        assert n_batches > 0 and jobs_per_batch > 0
+
+        # Imposta λ dallo scenario (a meno di override esterni)
+        lam = 1.0 / float(self.scenario.get_interarrival_mean())
+        self.set_arrival_rate(lam)
+
+        # Attiva il batcher "solo R" e avvia gli arrivi
+        self._batcher = EcommerceModel._BatchMeansR(self, n_batches, jobs_per_batch)
+        self.env.process(self._arrival_process())
+
+        # Esegui finché non si completano n_batches * jobs_per_batch job
+        self.env.run(until=self._batcher.done_ev)
+
+        # Risultato
+        series = {"R_mean_s_batches": self._batcher.R_mean_s_batches}
+
+        # Pulizia
+        self._batcher = None
+        return series
+
+
     # ---------- Run: orizzonte finito ----------
     def run_finite(self, *, horizon_s: float, warmup_s: float = 0.0, bins: int | None = None,
                    verbose: bool = True) -> Dict:
@@ -285,6 +311,51 @@ class EcommerceModel:
             out["N_series"] = N_series
 
         return out
+
+    # ---------- Run: steady-state (batch means, calcola solo R) ----------
+    class _BatchMeansR:
+        """Raccoglie solo i tempi di risposta medi per batch."""
+
+        def on_visit_complete(self, sname: str, soj_time: float) -> None:
+            # no-op: ci serve per compatibilità con _ps_visit che chiama sempre on_visit_complete
+            return
+
+        def __init__(self, model: "EcommerceModel", n_batches: int, jobs_per_batch: int):
+            self.m = model
+            self.n_batches = int(n_batches)
+            self.jobs_per_batch = int(jobs_per_batch)
+
+            # stato batch corrente
+            self.reset_batch_state()
+
+            # risultati
+            self.R_mean_s_batches: list[float] = []
+
+            # evento di stop per chiudere la simulazione
+            self.done_ev = self.m.env.event()
+
+        def reset_batch_state(self) -> None:
+            self.jobs_in_batch = 0
+            self.sum_R = 0.0
+
+        def on_job_complete(self, job) -> None:
+            # calcola tempo di risposta del job
+            Rj = job.completion_time - job.arrival_time
+            self.jobs_in_batch += 1
+            self.sum_R += Rj
+
+            # chiudi batch se pieno
+            if self.jobs_in_batch >= self.jobs_per_batch:
+                R_batch = self.sum_R / float(self.jobs_in_batch)
+                self.R_mean_s_batches.append(R_batch)
+
+                if len(self.R_mean_s_batches) >= self.n_batches:
+                    # stop simulazione
+                    if not self.done_ev.triggered:
+                        self.done_ev.succeed()
+                else:
+                    # reset per batch successivo
+                    self.reset_batch_state()
 
     # ---------- Run: steady-state (batch means) ----------
     class _BatchMeans:
