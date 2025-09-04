@@ -59,6 +59,7 @@ class EcommerceModel:
             use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
             # iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
             if self.scenario.arrival_process == "exp":
+                #stampa di debug
                 iat = Exponential(mean_iat)
             elif self.scenario.arrival_process == "hyperexp":
                 iat = HyperExp2Balanced(mean_iat, p=0.10)
@@ -87,29 +88,33 @@ class EcommerceModel:
         campiona Exp(mean = D_s) dove D_s è nello Scenario per (stazione, class_id).
         Lo switch di stream RNG è "safe": se lo stream dedicato non esiste, ripiega.
         """
+        #print debug
+        mean = float(self.scenario.service_demands.get(sname).get(class_id))
+        print(class_id,mean)
         kindA=self.scenario.service_dist.get("A")
         kindB=self.scenario.service_dist.get("B")
         kindP=self.scenario.service_dist.get("P")
+
         d=0.0;
 
         if sname=="A":
             if kindA == "exp":
                 d = self._exp_demand(sname, class_id)
             elif kindA == "erlang":
-                mean = float(self.scenario.service_demands.get(station, {}).get(class_id, 0.0))
+                mean = float(self.scenario.service_demands.get(sname).get(class_id))
                 d = service_dist.demand_erlang(mean,3)
 
         if sname=="B":
             if kindB == "exp":
                 d = self._exp_demand(sname, class_id)
             elif kindB == "lognorm":
-                mean = float(self.scenario.service_demands.get(station, {}).get(class_id, 0.0))
-                d = service_dist.demand_lognormal(mean,3)
+                mean = float(self.scenario.service_demands.get(sname).get(class_id))
+                d = service_dist.demand_lognormal(mean,2)
         if sname=="P":
             if kindP == "exp":
                 d = self._exp_demand(sname, class_id)
             elif kindP == "erlang":
-                mean = float(self.scenario.service_demands.get(station, {}).get(class_id, 0.0))
+                mean = float(self.scenario.service_demands.get(sname).get(class_id))
                 d = service_dist.demand_erlang(mean,3)
         if d <= 0.0:
             return

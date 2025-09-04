@@ -46,6 +46,8 @@ def demand_erlang(mean: float, k: int) -> float:
     """
     Estrae un campione Erlang-k con media 'mean' e SCV=1/k.
     """
+    if mean <= 0.0:
+        return 0.0
     n, b = erlang_params_from_mean(mean, k)
     return Erlang(n, b)
 
@@ -69,6 +71,8 @@ def demand_lognormal(mean: float, c2: float) -> float:
     """
     Estrae un campione Lognormale con media 'mean' e SCV 'c2' (>1).
     """
+    if mean <= 0.0:
+        return 0.0
     mu, sigma = lognormal_params_from_mean_scv(mean, c2)
     return Lognormal(mu, sigma)
 

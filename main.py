@@ -178,7 +178,7 @@ def run_phase_steady(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
 
 # ------------------------------- ENTRYPOINT ----------------------------------
 #commento per evitare questa funzione
-''' 
+
 def _choose_mode_via_io() -> tuple[str, str]:
 
     parser = argparse.ArgumentParser(description="Selezione della fase da eseguire")

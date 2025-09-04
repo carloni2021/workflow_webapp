@@ -149,6 +149,7 @@ def sweep_R_and_N_vs_lambda(
             n_reps=n_reps, measure_s=measure_s, warmup_s=warmup_s,
             seed0=seed0, min_completed=min_completed
         )
+
         R_means.append(meanR)
         R_errs.append(hwR)
         R_ns.append(n_eff)
