@@ -39,9 +39,8 @@ def sweep_response_vs_lambda(
     n_reps=15, measure_s=86400, warmup_s=8000, seed0=1234,
     outdir="out", save_png=True, save_csv=False, show=False,
 ):
-    print("[USO] validation_plot1 patchato")
 
-    # nome scenario sicurome
+    # nome scenario
     scenario_label = getattr(scn, "name", None)
     scenario_slug = _slug(scenario_label)
 

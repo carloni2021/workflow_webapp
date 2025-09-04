@@ -5,7 +5,7 @@ import sys
 import argparse
 
 from model.ecommerce import EcommerceModel
-from view.warmup_plot import plot_warmup_R
+from view.warmup_plot import plot_convergence_R
 from view.validation_plot_R_and_N import sweep_R_and_N_vs_lambda  # <-- nuovo sweep combinato
 
 SEED0 = 1234
@@ -13,8 +13,9 @@ DEFAULT_CONFIG_DIR = "config"
 
 # --- import dalla struttura a pacchetti ---
 from model.scenario import Scenario
-from view.validation_plot2 import sweep_response_vs_lambda_steady  # opzionale per fase steady
-
+from view.validation_plot1 import sweep_response_vs_lambda            # R(λ) transiente
+from view.validation_plot2 import sweep_response_vs_lambda_steady            # R(λ) transiente
+from view.validation_plot_users import sweep_users_vs_lambda          # N(λ) transiente
 
 def _slug(s: str) -> str:
     s = s.lower()
@@ -27,16 +28,11 @@ def _frange(start: float, end: float, step: float):
         yield round(x, 10)
         x = round(x + step, 10)
 
-
-def _run_warmup_plots_for_scenario(
+def _run_convergence_R_plot_for_scenario(
     scn: Scenario,
     *,
-    lam_start: float,
-    lam_end: float,
-    lam_step: float,
-    measure_s: float,
-    warmup_s: float,
-    bins: int | None = 400,
+    lam,
+    measure_s: float, warmup_s: float,
     seed: int = 1234,
     outroot: str | Path = "out",
 ) -> None:
@@ -49,22 +45,22 @@ def _run_warmup_plots_for_scenario(
     outdir.mkdir(parents=True, exist_ok=True)
     scn_slug = _slug(scn.name)
 
-    for lam in _frange(lam_start, lam_end, lam_step):
-        model = EcommerceModel(scn, seed=seed)
-        model.set_arrival_rate(lam)
-        res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, bins=bins, verbose=False)
 
-        R_cum = res.get("R_series_cum", [])
-        R_bin = res.get("R_series_bin", None)
+    model = EcommerceModel(scn, seed=seed)
+    model.set_arrival_rate(lam)
+    res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, verbose=False)
 
-        title = f"{scn.name} — R(t)  λ={lam:.3f}"
-        png = outdir / f"warmup_R_{scn_slug}_lam{lam:.2f}_W{int(warmup_s)}_M{int(measure_s)}.png"
+    R_cum = res.get("R_series_cum", [])
 
-        t_warm = plot_warmup_R(R_cum, R_bin, title=title, outfile=str(png), show=False)
-        if t_warm is not None:
-            print(f"[OK] Warmup plot salvato: {png}  (t_warm≈{t_warm:.1f}s)")
-        else:
-            print(f"[OK] Warmup plot salvato: {png}")
+    title = f"{scn.name} — R(t)  λ={lam:.3f}"
+    png = outdir / f"warmup_R_{scn_slug}_lam{lam:.2f}_W{int(warmup_s)}_M{int(measure_s)}.png"
+
+    t_warm = plot_convergence_R(R_cum, title=title, lam=lam, scn=scn, outfile=str(png), show=False)
+
+    if t_warm is not None:
+        print(f"[OK] Warmup plot salvato: {png}  (t_warm≈{t_warm:.1f}s)")
+    else:
+        print(f"[OK] Warmup plot salvato: {png}")
 
 
 # ------------------------------- FINITE --------------------------------------
@@ -104,15 +100,15 @@ def run_phase_finite(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
 
         # Plot R(t) vs tempo per stimare warmup (1 run per λ)
         print("[USO] warmup — R(t) vs tempo (1 run per λ)")
-        _run_warmup_plots_for_scenario(
+        _run_convergence_R_plot_for_scenario(
             scn,
-            lam_start=0.33, lam_end=0.33, lam_step=0.33,
-            measure_s=86_400.0,  # finestra di misura (1 giorno)
-            warmup_s=0.0,        # warmup escluso dal calcolo delle medie
-            bins=400,            # opzionale: solo per la serie per-bin
+            lam=0.33,
+            measure_s=86_400.0,   # finestra di misura (1 giorno)
+            warmup_s=0.0,     # warmup escluso dal calcolo delle medie
             seed=SEED0,
             outroot="out",
         )
+
 
 
 # ------------------------------- STEADY --------------------------------------
@@ -123,6 +119,7 @@ def _preflight_check_steady() -> tuple[bool, str]:
     - esistenza del plotter view.validation_plot_steady (se vuoi i grafici)
     Restituisce (ok, msg_errore_o_vuoto).
     """
+    # 1) run_batch_means nel modello
     try:
         from model.ecommerce import EcommerceModel  # noqa: F401
     except Exception as e:
@@ -132,12 +129,17 @@ def _preflight_check_steady() -> tuple[bool, str]:
         if not hasattr(EcommerceModel, "run_batch_means"):
             return False, "[ERRORE] EcommerceModel.run_batch_means(...) non trovato. Implementalo prima di eseguire la fase 'r'."
 
+    # 2) plotter steady (opzionale, ma utile)
     try:
         from view.validation_plot_steady import sweep_response_vs_lambda_steady  # noqa: F401
     except Exception:
+        # non blocchiamo, ma avvisiamo
         return True, "[INFO] Plotter steady mancante (view/validation_plot_steady.py). La fase 'r' proseguirà solo se lo aggiungi."
     return True, ""
 
+# File di output CSV
+OUT_CSV_FINITE = "out/summary_finite.csv"
+OUT_FILE_PATH = "out/"  # Usato solo per creare la cartella
 
 def run_phase_steady(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
     """
@@ -195,7 +197,7 @@ def _choose_mode_via_io() -> tuple[str, str]:
 
     # Default non interattivo
     return "finite", args.config
-'''
+
 
 def main() -> None:
     config_dir=DEFAULT_CONFIG_DIR
@@ -208,6 +210,5 @@ def main() -> None:
         run_phase_finite(config_dir=config_dir)
 
 
-#init
 if __name__ == "__main__":
     main()

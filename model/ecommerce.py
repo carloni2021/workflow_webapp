@@ -71,6 +71,7 @@ class EcommerceModel:
             jid += 1
             self.env.process(self.job_flow(jid))
 
+
     def _exp_demand(self, station: str, job_class: str) -> float:
 
         mean = float(self.scenario.service_demands.get(station, {}).get(job_class, 0.0))
@@ -151,7 +152,7 @@ class EcommerceModel:
             self._batcher.on_job_complete(job)
 
     # ---------- Run: orizzonte finito ----------
-    def run_finite(self, *, horizon_s: float, warmup_s: float = 0.0, bins: int | None = None,
+    def run_finite(self, *, horizon_s: float, warmup_s: float = 0.0,
                    verbose: bool = True) -> Dict:
         """
         Esegue una run a orizzonte finito (transiente) e misura le metriche nella finestra [warmup_s, horizon_s].
@@ -260,59 +261,46 @@ class EcommerceModel:
             "N_mean": N_mean,
         }
 
-        # --- Serie R(t): cumulativa e per-bin per analizzare il warmup ---
-        if bins and bins > 0:
-            # 1) Media cumulativa del tempo di risposta in funzione del tempo di completamento
-            jobs_sorted = sorted(self.jobs_completed, key=lambda j: j.completion_time)
-            R_series_cum = []
-            s = 0.0
-            n = 0
-            for j in jobs_sorted:
-                # consideriamo solo i job "puri" della finestra di misura
-                if not (t_start <= j.completion_time <= t_end):
-                    continue
-                if j.arrival_time < t_start:
-                    continue
-                n += 1
-                s += (j.completion_time - j.arrival_time)
-                R_series_cum.append((j.completion_time, s / n))
-            out["R_series_cum"] = R_series_cum
+        # --- Serie R(t) cumulativa per analizzare il warmup (nessuna logica per-bin) ---
+        jobs_puri = [
+            j for j in self.jobs_completed
+            if (t_start <= j.completion_time <= t_end) and (j.arrival_time >= t_start)
+        ]
+        jobs_sorted = sorted(jobs_puri, key=lambda j: j.completion_time)
 
-            # 2) Media per bin temporali adiacenti nella finestra [t_start, t_end]
-            width = (t_end - t_start) / bins
-            R_series_bin = []
-            for b in range(bins):
-                w0 = t_start + b * width
-                w1 = w0 + width
-                # completamenti che chiudono nel bin e con arrivo dopo l'inizio finestra
-                comp_bin = [
-                    j for j in self.jobs_completed
-                    if (w0 <= j.completion_time <= w1) and (j.arrival_time >= t_start)
-                ]
-                R_i = [j.completion_time - j.arrival_time for j in comp_bin]
-                Rm_i = (stats.mean(R_i) if R_i else float("nan"))
-                R_series_bin.append((0.5 * (w0 + w1), Rm_i))
-            out["R_series_bin"] = R_series_bin
+        R_series_cum = []
+        s = 0.0
+        for i, j in enumerate(jobs_sorted, start=1):
+            s += (j.completion_time - j.arrival_time)
+            R_series_cum.append((j.completion_time, s / i))
+        out["R_series_cum"] = R_series_cum
 
+        return out
 
-        # Serie su K finestre per studiare convergenza della stima N(t)
-        if bins and bins > 0:
-            width = (t_end - t_start) / bins
-            N_series = []
-            for b in range(bins):
-                w0 = t_start + b * width
-                w1 = w0 + width
-                # arrivi nella finestra
-                arr_in = sum((w0 <= t < w1) for t in self._arrival_times)
-                lam_i = arr_in / width if width > 0 else float("nan")
-                # completamenti con arrivo nella finestra e completamento entro la finestra
-                comp_bin = [j for j in self.jobs_completed if (w0 <= j.arrival_time < w1) and (j.completion_time <= w1)]
-                R_i = [j.completion_time - j.arrival_time for j in comp_bin]
-                Rm_i = (stats.mean(R_i) if R_i else float("nan"))
-                X_i = (len(comp_bin) / width) if width > 0 else float("nan")
-                N_i = (X_i * Rm_i) if (Rm_i == Rm_i and X_i == X_i) else float("nan")
-                N_series.append((0.5 * (w0 + w1), N_i))
-            out["N_series"] = N_series
+        # out = {
+        #     "R_mean_s": R_mean,
+        #     "X_jobs_per_s": X,
+        #     "U_A": U_A, "U_B": U_B, "U_P": U_P,
+        #     "n_completed": len(completed),
+        #     "N_mean": N_mean,
+        # }
+
+        # # --- Serie R(t): cumulativa e per-bin per analizzare il warmup ---
+        # # 1) Media cumulativa del tempo di risposta in funzione del tempo di completamento
+        # jobs_sorted = sorted(self.jobs_completed, key=lambda j: j.completion_time)
+        # R_series_cum = []
+        # s = 0.0
+        # n = 0
+        # for j in jobs_sorted:
+        #     # consideriamo solo i job "puri" della finestra di misura
+        #     if not (t_start <= j.completion_time <= t_end):
+        #         continue
+        #     if j.arrival_time < t_start:
+        #         continue
+        #     n += 1
+        #     s += (j.completion_time - j.arrival_time)
+        #     R_series_cum.append((j.completion_time, s / n))
+        # out["R_series_cum"] = R_series_cum
 
         return out
 

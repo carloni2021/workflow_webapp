@@ -26,25 +26,29 @@ def _estimate_warmup_from_cumulative(series_cum: List[Tuple[float, float]],
         prev = rbar
     return None
 
-def plot_warmup_R(R_cum, R_bin=None, *, title=None, outfile=None, show=True):
+def plot_convergence_R(R_cum, *, lam=None, scn=None, title=None, outfile=None, show=True):
     import matplotlib.pyplot as plt
 
     plt.figure(figsize=(8, 5))
 
-    # Serie per-bin (rumorosa)
-    if R_bin:
-        t_bin, y_bin = zip(*R_bin)
-        plt.plot(t_bin, y_bin, color="skyblue", alpha=0.6, label="R medio per bin (rumoroso)")
-
-    # Serie cumulativa (più stabile)
+    # Serie cumulativa
     if R_cum:
         t_cum, y_cum = zip(*R_cum)
         plt.plot(t_cum, y_cum, color="darkorange", linewidth=2, label="R medio cumulativo")
 
     # --- Calcolo teorico ---
-    lam = 1/3  # tasso di arrivo
-    D_A, D_B, D_P = 0.7, 0.8, 0.4
-    U_A, U_B, U_P = lam*D_A, lam*D_B, lam*D_P
+    # lam = 1/3  # tasso di arrivo
+    # D_A, D_B, D_P = 0.7, 0.8, 0.4
+    # U_A, U_B, U_P = lam*D_A, lam*D_B, lam*D_P
+
+    sd = getattr(scn, "service_demands", {}) or {}
+
+    D_A = sum(sd.get("A", {}).values()) if "A" in sd else 0.0
+    D_B = sum(sd.get("B", {}).values()) if "B" in sd else 0.0
+    D_P = sum(sd.get("P", {}).values()) if "P" in sd else 0.0
+
+    U_A, U_B, U_P = lam * D_A, lam * D_B, lam * D_P
+
     R_A = D_A / (1 - U_A)
     R_B = D_B / (1 - U_B)
     R_P = D_P / (1 - U_P)
