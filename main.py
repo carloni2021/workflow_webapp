@@ -6,19 +6,20 @@ import argparse
 
 from model.ecommerce import EcommerceModel
 from view.warmup_plot import plot_warmup_R
+from view.validation_plot_R_and_N import sweep_R_and_N_vs_lambda  # <-- nuovo sweep combinato
 
 SEED0 = 1234
 DEFAULT_CONFIG_DIR = "config"
 
 # --- import dalla struttura a pacchetti ---
 from model.scenario import Scenario
-from view.validation_plot1 import sweep_response_vs_lambda            # R(λ) transiente
-from view.validation_plot2 import sweep_response_vs_lambda_steady            # R(λ) transiente
-from view.validation_plot_users import sweep_users_vs_lambda          # N(λ) transiente
+from view.validation_plot2 import sweep_response_vs_lambda_steady  # opzionale per fase steady
+
 
 def _slug(s: str) -> str:
     s = s.lower()
     return "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in s).strip("_")
+
 
 def _frange(start: float, end: float, step: float):
     x = float(start)
@@ -26,11 +27,15 @@ def _frange(start: float, end: float, step: float):
         yield round(x, 10)
         x = round(x + step, 10)
 
+
 def _run_warmup_plots_for_scenario(
     scn: Scenario,
     *,
-    lam_start: float, lam_end: float, lam_step: float,
-    measure_s: float, warmup_s: float,
+    lam_start: float,
+    lam_end: float,
+    lam_step: float,
+    measure_s: float,
+    warmup_s: float,
     bins: int | None = 400,
     seed: int = 1234,
     outroot: str | Path = "out",
@@ -66,8 +71,10 @@ def _run_warmup_plots_for_scenario(
 def run_phase_finite(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
     """
     Caso TRANSIENTE (orizzonte finito):
-    - genera il plot R(λ) (già presente)
-    - genera il plot N(λ) = X·R (utenti medi nel sistema)
+    - esegue un'unica tornata di repliche per λ e produce:
+        * plot R(λ) ± CI95
+        * plot N(λ) = X·R ± CI95
+    - genera anche il plot R(t) per stimare il warmup (1 run per λ)
     per TUTTI gli scenari nella cartella config_dir.
     """
     outdir = Path("out")
@@ -82,36 +89,30 @@ def run_phase_finite(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
         scn = Scenario.from_yaml(str(path))
         print(f"[FINITE] Sweep λ | scenario: {scn.name}")
 
-        # Plot R(λ) (come già facevi)
-        sweep_response_vs_lambda(
+        # Plot combinato: UNA SOLA tornata di repliche → due PNG (R e N)
+        sweep_R_and_N_vs_lambda(
             scn,
             lam_start=0.5, lam_end=1.2, lam_step=0.05,
-           seed0=SEED0,
+            n_reps=15,
+            measure_s=86_400.0,  # 1 giorno
+            warmup_s=8_000.0,
+            seed0=SEED0,
+            min_completed=100,
+            outdir="out",
+            save_png=True, save_csv=False, show=False,
         )
 
-        # Plot N(λ) = X·R (nuovo)
-        sweep_users_vs_lambda(
-            scn,
-            #DA MODIFICARE!!!
-            lam_start=0.5, lam_end=1.2, lam_step=0.05,
-            n_reps=15,               # come nel tuo plot R(λ)
-            measure_s=86_400.0,      # 1 giorno di misura
-            warmup_s=8_000.0,        # warmup
-            seed0=SEED0,
-        outdir="out", save_png=True, save_csv=False, show=False,
-        )#
         # Plot R(t) vs tempo per stimare warmup (1 run per λ)
         print("[USO] warmup — R(t) vs tempo (1 run per λ)")
         _run_warmup_plots_for_scenario(
             scn,
             lam_start=0.33, lam_end=0.33, lam_step=0.33,
-            measure_s=86_400.0,   # finestra di misura (1 giorno)
-            warmup_s=0.0,     # warmup escluso dal calcolo delle medie
-            bins=400,             # opzionale: solo per la serie per-bin; la cumulativa non ne dipende
+            measure_s=86_400.0,  # finestra di misura (1 giorno)
+            warmup_s=0.0,        # warmup escluso dal calcolo delle medie
+            bins=400,            # opzionale: solo per la serie per-bin
             seed=SEED0,
             outroot="out",
         )
-
 
 
 # ------------------------------- STEADY --------------------------------------
@@ -122,7 +123,6 @@ def _preflight_check_steady() -> tuple[bool, str]:
     - esistenza del plotter view.validation_plot_steady (se vuoi i grafici)
     Restituisce (ok, msg_errore_o_vuoto).
     """
-    # 1) run_batch_means nel modello
     try:
         from model.ecommerce import EcommerceModel  # noqa: F401
     except Exception as e:
@@ -132,17 +132,12 @@ def _preflight_check_steady() -> tuple[bool, str]:
         if not hasattr(EcommerceModel, "run_batch_means"):
             return False, "[ERRORE] EcommerceModel.run_batch_means(...) non trovato. Implementalo prima di eseguire la fase 'r'."
 
-    # 2) plotter steady (opzionale, ma utile)
     try:
         from view.validation_plot_steady import sweep_response_vs_lambda_steady  # noqa: F401
     except Exception:
-        # non blocchiamo, ma avvisiamo
         return True, "[INFO] Plotter steady mancante (view/validation_plot_steady.py). La fase 'r' proseguirà solo se lo aggiungi."
     return True, ""
 
-# File di output CSV
-OUT_CSV_FINITE = "out/summary_finite.csv"
-OUT_FILE_PATH = "out/"  # Usato solo per creare la cartella
 
 def run_phase_steady(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
     """
@@ -204,10 +199,12 @@ def main() -> None:
     mode, config_dir = _choose_mode_via_io()
     print(f"[INFO] modalità={mode} | config_dir={config_dir}")
 
-    if mode == "steady":
-        run_phase_steady(config_dir=config_dir)
-    else:
-        run_phase_finite(config_dir=config_dir)
+    #if mode == "steady":
+    #    run_phase_steady(config_dir=config_dir)
+    #else:
+    #    run_phase_finite(config_dir=config_dir)
+
+    run_phase_finite(config_dir=config_dir)
 
 
 if __name__ == "__main__":

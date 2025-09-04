@@ -4,6 +4,7 @@ import statistics as stats
 
 from rndbook.rng_setup import init_rng_for_replication, use_stream
 from rndbook.rvgs import Exponential
+from rndbook.hyperexp import HyperExp2Balanced
 
 from model.scenario import Scenario
 from model.entities import JobRecord
@@ -55,7 +56,8 @@ class EcommerceModel:
 
             mean_iat = 1.0 / lam
             use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
-            iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
+            # iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
+            iat = HyperExp2Balanced(mean_iat, p=0.10)
             yield self.env.timeout(iat)
             self._arrival_times.append(self.env.now)  # LOG dell’arrivo reale
 
