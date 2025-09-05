@@ -90,7 +90,7 @@ class EcommerceModel:
         """
         #print debug
         mean = float(self.scenario.service_demands.get(sname).get(class_id))
-        print(class_id,mean)
+        # print(class_id,mean)
         kindA=self.scenario.service_dist.get("A")
         kindB=self.scenario.service_dist.get("B")
         kindP=self.scenario.service_dist.get("P")
