@@ -519,7 +519,7 @@ class EcommerceModel:
         Ritorna (series, diag) dove series è l'output di run_batch_means e diag contiene b, L_cut, ecc.
         """
         diag = self.suggest_b_via_cutoff(lam, K=K, n_jobs_calib=n_jobs_calib,warmup_jobs=warmup_jobs, run=run, z=z)
-        b =44 #diag["b"]
+        b = 44 #diag["b"]
         series = self.run_batch_means(n_batches=n_batches, jobs_per_batch=b, lam=lam)
         return series, diag
 
