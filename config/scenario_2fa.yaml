@@ -1,4 +1,4 @@
-# Scenario SCA: autenticazione a 2 fattori (2FA)
+# Scenario SCA: autenticazione a 2 fattori (2FA) - Caso base con distribuzioni esponenziali
 name: "2FA (SCA)"
 arrival_process: "exp"
 service_dist:

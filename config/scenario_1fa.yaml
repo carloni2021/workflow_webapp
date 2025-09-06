@@ -1,3 +1,4 @@
+# Scenario SCA: autenticazione a 1 fattori (1FA) - Caso base con distribuzioni esponenziali
 name: "1FA (base)"
 arrival_process: "exp"
 service_dist:

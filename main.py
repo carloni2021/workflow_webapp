@@ -330,7 +330,9 @@ def _choose_mode_via_io() -> tuple[str, str]:
 
 def main() -> None:
     config_dir = DEFAULT_CONFIG_DIR
-    print(f"[INFO] batch-means one-λ | config_dir={config_dir} | λ=0.33")
+    print(f"[INFO] finite horizon run - validation study + single lambda study")
+    run_phase_finite(config_dir=config_dir)
+    print(f"[INFO] batch-means one-λ | λ=0.33")
     run_single_lambda_batch_means(config_dir=config_dir, lam=0.33, n_batches=64)
 
 if __name__ == "__main__":
