@@ -3,6 +3,9 @@ from typing import Dict, List, Optional
 import statistics as stats
 from rndbook import service_dist
 
+import math
+import numpy as np
+
 from rndbook.rng_setup import init_rng_for_replication, use_stream
 from rndbook.rvgs import Exponential
 from rndbook.hyperexp import HyperExp2Balanced
@@ -383,35 +386,140 @@ class EcommerceModel:
                 else:
                     self.reset_batch_state()
 
-    def run_batch_means(self, *, n_batches: int, jobs_per_batch: int) -> Dict[str, List[float]]:
+    def run_batch_means(self, *, n_batches: int, jobs_per_batch: int, lam: float | None = None) -> Dict[
+        str, List[float]]:
         """
         Esegue la run a regime (batch means) e restituisce le serie per-batch:
         - R_mean_s_batches:   media dei tempi di risposta per batch
         - X_jobs_per_s_batches: throughput per batch
         - U_A/B/P_batches:    utilizzazioni per batch
+        - N_mean_batches:     stima per-batch del numero medio N = X * R    # NUOVO
         """
         assert n_batches > 0 and jobs_per_batch > 0
 
-        # Imposta il tasso di arrivo dal tuo Scenario (il controller non lo setta)
-        lam = 1.0 / float(self.scenario.get_interarrival_mean())
-        self.set_arrival_rate(lam)
+        # Se lam non è passato, usa quello dallo Scenario
+        if lam is None:
+            lam = 1.0 / float(self.scenario.get_interarrival_mean())
+        self.set_arrival_rate(float(lam))
 
-        # batcher e avvio sorgente di arrivi
         self._batcher = EcommerceModel._BatchMeans(self, n_batches, jobs_per_batch)
         self.env.process(self._arrival_process())
-
-        # Esegui finché non si completano n_batches * jobs_per_batch job
         self.env.run(until=self._batcher.done_ev)
 
-        # Confeziona il risultato atteso dal controller steady_state.py
         series = {
             "R_mean_s_batches": self._batcher.R_mean_s_batches,
             "X_jobs_per_s_batches": self._batcher.X_jobs_per_s_batches,
             "U_A_batches": self._batcher.U_A_batches,
             "U_B_batches": self._batcher.U_B_batches,
             "U_P_batches": self._batcher.U_P_batches,
+            "N_mean_batches": [r * x for r, x in
+                               zip(self._batcher.R_mean_s_batches, self._batcher.X_jobs_per_s_batches)],  # NUOVO
         }
-
-        # pulizia
         self._batcher = None
         return series
+
+    # --- ACF e scelta di b (DENTRO EcommerceModel, NON dentro _BatchMeans) ---
+
+    def _collect_W_series(self, lam: float, n_jobs: int, warmup_jobs: int = 5000) -> list[float]:
+        """Colleziona la serie per-job W_i (post-burnin) a tasso lam per stimare l'ACF."""
+        calib = EcommerceModel(self.scenario, seed=self.seed + 999)
+        calib.set_arrival_rate(lam)
+        goal = warmup_jobs + n_jobs
+
+        calib._stop_event = calib.env.event()
+
+        def stopper():
+            while True:
+                if len(calib.jobs_completed) >= goal:
+                    if not calib._stop_event.triggered:
+                        calib._stop_event.succeed()
+                    return
+                yield calib.env.timeout(1.0)
+
+        calib.env.process(stopper())
+        calib.env.process(calib._arrival_process())
+        calib.env.run(until=calib._stop_event)
+
+        jobs = calib.jobs_completed[warmup_jobs:goal]
+        return [(j.completion_time - j.arrival_time) for j in jobs]
+
+    @staticmethod
+    def _acf_normalized(x: list[float], K: int) -> list[float]:
+        """ACF normalizzata r[0..K] con r[0]=1."""
+        x = np.asarray(x, float)
+        n = x.size
+        if n == 0:
+            return [1.0] + [0.0] * K
+        mu = float(x.mean())
+        xc = x - mu
+        var = float(np.dot(xc, xc))
+        if var <= 0:
+            return [1.0] + [0.0] * K
+        r = [1.0]
+        for j in range(1, K + 1):
+            r.append(float(np.dot(xc[:n - j], xc[j:])) / var)
+        return r
+
+    @staticmethod
+    def _cutoff_from_acf(r: list[float], n: int, run: int = 3, z: float = 1.96) -> int | None:
+        """Primo lag j≥1 con 'run' consecutivi entro ±z/√n. None se non trovato entro len(r)-1."""
+        band = z / math.sqrt(max(n, 1))
+        for j in range(1, len(r) - run + 1):
+            if all(abs(r[k]) < band for k in range(j, j + run)):
+                return j
+        return None
+
+    def suggest_b_via_cutoff(self, lam: float, K: int = 200,
+                             n_jobs_calib: int = 50_000, warmup_jobs: int = 5_000,
+                             run: int = 3, z: float = 1.96) -> dict:
+        """Stima b con la regola del cut-off: b >= 2*L_cut sull'ACF di W_i a tasso 'lam'."""
+        W = self._collect_W_series(lam, n_jobs=n_jobs_calib, warmup_jobs=warmup_jobs)
+        r = self._acf_normalized(W, K)
+        band = z / math.sqrt(max(len(W), 1))
+        L = self._cutoff_from_acf(r, n=len(W), run=run, z=z)
+        if L is None:
+            L = K  # prudente: non abbiamo visto il taglio entro K
+
+        # finestra attorno al cut-off: [L-2, ..., L+2] “clippata” ai limiti 1..K
+        idx_from = max(1, L - 2)
+        idx_to = min(L + 2, len(r) - 1)
+        r_near = r[idx_from: idx_to + 1]
+        r_near_abs = [abs(v) for v in r_near]
+
+        # check dei "run" consecutivi sotto banda a partire da L
+        end_run = min(L + run, len(r))
+        ok_run = all(abs(r[k]) < band for k in range(L, end_run))
+
+        b = max(2 * L, 1)
+
+        return {
+            "b": int(b),
+            "L_cut": int(L),
+            "K_used": K,
+            "n_calib": len(W),
+            "band_95": band,
+            "r1": (r[1] if len(r) > 1 else float("nan")),
+
+            # NUOVO: diagnostiche utili per “guardare” il taglio
+            "run": run,
+            "ok_run": bool(ok_run),
+            "idx_from": int(idx_from),
+            "idx_to": int(idx_to),
+            "r_near_cut": r_near,  # con segno
+            "r_near_cut_abs": r_near_abs,  # in valore assoluto
+        }
+
+    def run_batch_means_auto_single_lambda(self, *, lam: float = 0.33,
+                                           n_batches: int = 64, K: int = 200,
+                                           n_jobs_calib: int = 50000, warmup_jobs: int = 5000,
+                                           run: int = 3, z: float = 1.96):
+        """
+        1) Stima b via ACF-cutoff sulla serie W_i a tasso 'lam';
+        2) Esegue batch-means con a=n_batches e b stimato.
+        Ritorna (series, diag) dove series è l'output di run_batch_means e diag contiene b, L_cut, ecc.
+        """
+        diag = self.suggest_b_via_cutoff(lam, K=K, n_jobs_calib=n_jobs_calib,warmup_jobs=warmup_jobs, run=run, z=z)
+        b =44 #diag["b"]
+        series = self.run_batch_means(n_batches=n_batches, jobs_per_batch=b, lam=lam)
+        return series, diag
+
