@@ -87,20 +87,21 @@ def run_phase_finite(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
         scn = Scenario.from_yaml(str(path))
         print(f"[FINITE] Sweep λ | scenario: {scn.name}")
 
-        # Plot combinato: UNA SOLA tornata di repliche → due PNG (R e N)
-        sweep_R_and_N_vs_lambda(
-            scn,
-            lam_start=0.5, lam_end=1.2, lam_step=0.05,
-            n_reps=15,
-            measure_s=86_400.0,  # 1 giorno
-            warmup_s=8_000.0,
-            seed0=SEED0,
-            min_completed=100,
-            outdir="out",
-            save_png=True, save_csv=False, show=False,
-        )
+        if scn.name == "1FA (base)" or scn.name == "2FA (base)":
+            # Plot combinato: UNA SOLA tornata di repliche → due PNG (R e N)
+            sweep_R_and_N_vs_lambda(
+                scn,
+                lam_start=0.5, lam_end=1.2, lam_step=0.05,
+                n_reps=15,
+                measure_s=86_400.0,  # 1 giorno
+                warmup_s=8_000.0,
+                seed0=SEED0,
+                min_completed=100,
+                outdir="out",
+                save_png=True, save_csv=False, show=False,
+            )
 
-        # Plot R(t) vs tempo per stimare warmup (1 run per λ)
+            # Plot R(t) vs tempo per stimare warmup (1 run per λ)
         print("[USO] warmup — R(t) vs tempo (1 run per λ)")
         _run_convergence_R_plot_for_scenario(
             scn,
@@ -329,8 +330,8 @@ def _choose_mode_via_io() -> tuple[str, str]:
 
 def main() -> None:
     config_dir = DEFAULT_CONFIG_DIR
-    # print(f"[INFO] finite horizon run - validation study + single lambda study")
-    # run_phase_finite(config_dir=config_dir)
+    print(f"[INFO] finite horizon run - validation study + single lambda study")
+    run_phase_finite(config_dir=config_dir)
     print(f"[INFO] batch-means one-λ | λ=0.33")
     run_single_lambda_batch_means(config_dir=config_dir, lam=0.33, n_batches=64)
 

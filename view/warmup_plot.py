@@ -27,8 +27,6 @@ def _estimate_warmup_from_cumulative(series_cum: List[Tuple[float, float]],
     return None
 
 def plot_convergence_R(R_cum, *, lam=None, scn=None, title=None, outfile=None, show=True):
-    import math
-    import matplotlib.pyplot as plt
 
     if scn is None:
         raise ValueError("scn mancante")
