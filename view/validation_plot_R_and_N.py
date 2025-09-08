@@ -5,6 +5,7 @@ import statistics as stats
 import matplotlib.pyplot as plt
 from model.ecommerce import EcommerceModel
 
+from rndbook.ci_95 import ci95_hw
 from rndbook.rngs import plantSeeds, selectStream, getSeed, putSeed
 from rndbook.rng_setup import STREAMS  # {"arrivals":0,"service_A":1,"service_B":2,"service_P":3}
 
@@ -12,23 +13,6 @@ from rndbook.rng_setup import STREAMS  # {"arrivals":0,"service_A":1,"service_B"
 
 def _slug(txt: str | None) -> str:
     return re.sub(r'[^A-Za-z0-9._-]+', '-', str(txt or "scenario")).strip('-').lower()
-
-def _ci95(vals: list[float]) -> tuple[float, float, int]:
-    """
-    Ritorna (media, halfwidth CI95, n_eff) usando stdev campionaria.
-    Se n<2 -> halfwidth=0.
-    Filtra eventuali NaN.
-    """
-    vals = [v for v in vals if v == v]  # drop NaN
-    n = len(vals)
-    if n == 0:
-        return (math.nan, math.nan, 0)
-    m = stats.fmean(vals)
-    if n == 1:
-        return (m, 0.0, 1)
-    sd = stats.stdev(vals)  # campionaria
-    hw = 1.96 * sd / math.sqrt(n)
-    return (m, hw, n)
 
 # ------------- snapshot/restore RNG streams ----------------
 
@@ -105,7 +89,7 @@ def _run_reps_for_lambda_R_and_N(
             Rs.append(R); Ns.append(N)
 
     # ritorna (R stats, N stats, righe per-replica con seed logging)
-    return _ci95(Rs), _ci95(Ns), per_rep_rows
+    return ci95_hw(Rs), ci95_hw(Ns), per_rep_rows
 
 # ------------- sweep e plotting separato --------------------
 

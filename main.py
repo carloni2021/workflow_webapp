@@ -1,10 +1,12 @@
 # main.py
 from __future__ import annotations
-from pathlib import Path
 import sys
 import argparse
 
+from pathlib import Path
+
 from model.ecommerce import EcommerceModel
+from rndbook.ci_95 import ci95_safe
 from view.warmup_plot import plot_convergence_R
 from view.validation_plot_R_and_N import sweep_R_and_N_vs_lambda  # <-- nuovo sweep combinato
 
@@ -128,11 +130,7 @@ def run_single_lambda_batch_means(config_dir: str = None,
         n_batches:  numero di batch, es. 64
     """
     # --- import locali per evitare dipendenze in testa al file ---
-    from pathlib import Path
-    import math
-    from statistics import mean, stdev, StatisticsError
-    from model.scenario import Scenario
-    from model.ecommerce import EcommerceModel
+
 
     # --- risoluzione cartella config e seed ---
     if config_dir is None:
@@ -150,22 +148,6 @@ def run_single_lambda_batch_means(config_dir: str = None,
 
     outdir = Path("out")
     outdir.mkdir(parents=True, exist_ok=True)
-
-    # --- utility locali ---
-    def ci95_safe(xs):
-        xs = list(xs)
-        n = len(xs)
-        if n == 0:
-            return float("nan"), (float("nan"), float("nan"))
-        m = mean(xs)
-        if n == 1:
-            return m, (m, m)
-        try:
-            s = stdev(xs)  # sample stdev (n-1)
-        except StatisticsError:
-            return m, (m, m)
-        se = s / math.sqrt(n)
-        return m, (m - 1.96 * se, m + 1.96 * se)
 
     def sanitize_name(s: str) -> str:
         # per file name pulito
@@ -208,6 +190,7 @@ def run_single_lambda_batch_means(config_dir: str = None,
         UB_m, UB_ci = ci95_safe(UB)
         UP_m, UP_ci = ci95_safe(UP)
 
+        print("  ---- Sintesi batch-means ----")
         print(f"  b={diag['b']} (Lcut={diag['L_cut']}, banda≈{diag['band_95']:.4f}, n_calib={diag['n_calib']})")
         print(f"  R̄={Rm:.4f}  CI95=[{Rci[0]:.4f}, {Rci[1]:.4f}]")
         print(f"  N̄={Nm:.4f}  CI95=[{Nci[0]:.4f}, {Nci[1]:.4f}]")

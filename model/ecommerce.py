@@ -67,7 +67,7 @@ class EcommerceModel:
             elif self.scenario.arrival_process == "hyperexp":
                 iat = HyperExp2Balanced(mean_iat, p=0.10)
             else:
-                raise ValueError(f"arrival_kind non supportato: {self.arrival_process}")
+                raise ValueError(f"arrival_kind non supportato: {self.scenario.arrival_process}")
             yield self.env.timeout(iat)
             self._arrival_times.append(self.env.now)  # LOG dell’arrivo reale
 
