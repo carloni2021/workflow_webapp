@@ -3,6 +3,8 @@ from model.ecommerce import EcommerceModel
 from model.scenario import Scenario
 from view.convergence_plot import plot_convergence_R, plot_convergence_N
 
+DEFAULT_CONFIG_DIR = "config"
+
 #finite horizon run - convergence study
 def _run_convergence_R_plot_for_scenario(
     scn: Scenario,
