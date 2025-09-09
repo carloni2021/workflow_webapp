@@ -1,248 +1,113 @@
 import re
-
 from pathlib import Path
 from model.ecommerce import EcommerceModel
 from model.scenario import Scenario
-from view.convergence_plot import plot_convergence_R, plot_convergence_N
+from view.convergence_plot import (
+    plot_convergence_R_multi,
+    plot_convergence_N_multi,
+)
+from rndbook.rngs import selectStream, getSeed, putSeed, plantSeeds
+from rndbook.rng_setup import STREAMS
 
 DEFAULT_CONFIG_DIR = "config"
-SEED0=1234
+RUNS = 5           # quante repliche vuoi sovrapporre
+INIT_SEED = 1234   # un solo seed iniziale
 
 # ---------------- utils ----------------
 def _slug(txt: str | None) -> str:
     return re.sub(r'[^A-Za-z0-9._-]+', '-', str(txt or "scenario")).strip('-').lower()
 
-# finite horizon run - convergence study
-def _run_convergence_R_plot_for_scenario(
+# ------------- snapshot/restore RNG streams ----------------
+def _snapshot_streams(stream_names=None) -> dict[str, int]:
+    stream_names = list(stream_names) if stream_names is not None else list(STREAMS.keys())
+    snap = {}
+    for name in stream_names:
+        selectStream(STREAMS[name])
+        snap[name] = int(getSeed())
+    return snap
+
+def _restore_streams(state: dict[str, int]) -> None:
+    for name, seed in state.items():
+        selectStream(STREAMS[name])
+        putSeed(int(seed))
+
+# ---------------- core: run "in continuità" sui RNG streams ----------------
+def _run_overlay_continued_rng(
     scn: Scenario,
     *,
-    lam,
-    measure_s: float, warmup_s: float,
-    seed: int = 1234,
+    lam: float,
+    measure_s: float,
+    warmup_s: float,
+    runs: int = RUNS,
+    init_seed: int = INIT_SEED,
     outroot: str | Path = "out",
 ) -> None:
     """
-    Per ogni λ nella sweep:
-      - esegue una run finita (misura = measure_s, warmup = warmup_s)
-      - salva PNG con R(t) cumulativo (e opzionalmente per-bin)
+    Esegue 'runs' repliche in sequenza: la run k+1 riparte dai RNG streams
+    fermi alla fine della run k. Produce overlay di R(t) e N(t).
     """
     outdir = Path(outroot) / _slug(scn.name)
     outdir.mkdir(parents=True, exist_ok=True)
     scn_slug = _slug(scn.name)
 
+    R_list, N_list = [], []
 
-    model = EcommerceModel(scn, seed=seed)
+    # --- RUN 1: parte dal seed iniziale (semina gestita dal modello)
+    print(f"[INFO] Seed iniziale usato: {init_seed}")
+    model = EcommerceModel(scn, seed=init_seed)
     model.set_arrival_rate(lam)
     res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, verbose=False)
 
     R_cum = res.get("R_series_cum", [])
-
-    title = f"{scn.name} — R(t)  λ={lam:.3f}"
-    png = outdir / f"warmup_R_{scn_slug}_lam{lam:.2f}_W{int(warmup_s)}_M{int(measure_s)}.png"
-
-    t_warm = plot_convergence_R(R_cum, title=title, lam=lam, scn=scn, outfile=str(png), show=False)
-
-    if t_warm is not None:
-        print(f"[OK] Warmup plot salvato: {png}  (t_warm≈{t_warm:.1f}s)")
-    else:
-        print(f"[OK] Warmup plot salvato: {png}")
-
-<<<<<<< Updated upstream
-def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
-    """
-    Caso TRANSIENTE (orizzonte finito):
-    - esegue un'unica tornata di repliche per λ e produce:
-        * plot R(λ) ± CI95
-        * plot N(λ) = X·R ± CI95
-    - genera anche il plot R(t) per stimare il warmup (1 run per λ)
-    per TUTTI gli scenari nella cartella config_dir.
-    """
-    outdir = Path("out")
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    yaml_files = sorted(Path(config_dir).glob("*.y*ml"))
-    if not yaml_files:
-        print(f"[WARN] Nessun YAML trovato in '{config_dir}'.")
-        return
-
-    for path in yaml_files:
-        scn = Scenario.from_yaml(str(path))
-
-        # Plot R(t) vs tempo per stimare warmup (1 run per λ)
-        print("[USO] warmup — R(t) vs tempo (1 run per λ)")
-        _run_convergence_R_plot_for_scenario(
-            scn,
-            lam=0.33,
-            measure_s=86_400.0,   # finestra di misura (1 giorno)
-            warmup_s=0.0,     # warmup escluso dal calcolo delle medie
-            seed=SEED0,
-            outroot="out",
-        )
-        # Plot N(t) vs tempo con stessa logica (1 run per λ)   # <— NEW
-        print("[USO] warmup — N(t) vs tempo (1 run per λ)")
-        _run_convergence_N_plot_for_scenario(
-            scn,
-            lam=0.33,
-            measure_s=86_400.0,  # 1 giorno
-            warmup_s=0.0,
-            seed=SEED0,
-            outroot="out",
-        )
-
-def _run_convergence_N_plot_for_scenario(
-=======
-#def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
-#    """
-#    Caso TRANSIENTE (orizzonte finito):
-#    - esegue un'unica tornata di repliche per λ e produce:
-#        * plot R(λ) ± CI95
-#        * plot N(λ) = X·R ± CI95
-#    - genera anche il plot R(t) per stimare il warmup (1 run per λ)
-#    per TUTTI gli scenari nella cartella config_dir.
-#    """
-#    outdir = Path("out")
-#    outdir.mkdir(parents=True, exist_ok=True)
-#
-#    yaml_files = sorted(Path(config_dir).glob("*.y*ml"))
-#    if not yaml_files:
-#        print(f"[WARN] Nessun YAML trovato in '{config_dir}'.")
-#        return
-#
-#    for path in yaml_files:
-#        scn = Scenario.from_yaml(str(path))
-#
-#        # Plot R(t) vs tempo per stimare warmup (1 run per λ)
-#        print("[USO] warmup — R(t) vs tempo (1 run per λ)")
-#        _run_convergence_R_plot_for_scenario(
-#            scn,
-#            lam=0.33,
-#            measure_s=86_400.0,   # finestra di misura (1 giorno)
-#            warmup_s=0.0,     # warmup escluso dal calcolo delle medie
-#            seed=SEED0,
-#            outroot="out",
-#        )
-#        # Plot N(t) vs tempo con stessa logica (1 run per λ)   # <— NEW
-#        print("[USO] warmup — N(t) vs tempo (1 run per λ)")
-#        _run_convergence_N_plot_for_scenario(
-#            scn,
-#            lam=0.33,
-#            measure_s=86_400.0,  # 1 giorno
-#            warmup_s=0.0,
-#            seed=SEED0,
-#            outroot="out",
-#        )
-#
-def _run_convergence_N_plot_for_scenario(  # <— NEW
->>>>>>> Stashed changes
-        scn: Scenario,
-        *,
-        lam,
-        measure_s: float, warmup_s: float,
-        seed: int = 1234,
-        outroot: str | Path = "out",
-) -> None:
-    """
-    Per ogni λ nella sweep:
-      - esegue una run finita (misura = measure_s, warmup = warmup_s)
-      - salva PNG con N(t) cumulativo (e linea teorica solo se tutto exp)
-      - se la serie N cumulativa non è disponibile, usa Little: N(t)=λ·R(t)
-    """
-    outdir = Path(outroot) / _slug(scn.name)
-    outdir.mkdir(parents=True, exist_ok=True)
-    scn_slug = _slug(scn.name)
-
-    model = EcommerceModel(scn, seed=seed)
-    model.set_arrival_rate(lam)
-    res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, verbose=False)
-
     N_cum = res.get("N_series_cum", [])
-    if not N_cum:
+    if not N_cum and R_cum:
+        N_cum = [(t, lam * y) for (t, y) in R_cum]
+    R_list.append(R_cum)
+    N_list.append(N_cum)
+
+    plantSeeds(init_seed)  # per sicurezza, reimposto il seed iniziale
+
+    # Snapshot stato RNG al termine della prima run
+    last_state = _snapshot_streams()
+    print(f"[INFO] Stato RNG fine-run 1: {last_state}")
+
+    # --- RUN 2..runs: riprendi esattamente da dove si erano fermati i RNG
+    for k in range(2, runs + 1):
+        # 1) crea il modello della prossima run (eventuali init interni non ti disturbano)
+        model = EcommerceModel(scn)
+        model.set_arrival_rate(lam)
+        # 2) ripristina lo stato RNG *dopo* la costruzione ma *prima* della run
+        _restore_streams(last_state)
+
+        res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, verbose=False)
+
         R_cum = res.get("R_series_cum", [])
-        if R_cum:
-            N_cum = [(t, lam * y) for (t, y) in R_cum]  # Little (fallback)
-
-    title = f"{scn.name} — N(t)  λ={lam:.3f}"
-    png = outdir / f"warmup_N_{scn_slug}_lam{lam:.2f}_W{int(warmup_s)}_M{int(measure_s)}.png"
-
-    t_warm = plot_convergence_N(N_cum, title=title, lam=lam, scn=scn, outfile=str(png), show=False)
-
-    if t_warm is not None:
-        print(f"[OK] Warmup plot salvato: {png}  (t_warm≈{t_warm:.1f}s)")
-    else:
-        print(f"[OK] Warmup plot salvato: {png}")
-#------------------------------- FUNZIONI AUSILIARIE ----------------------------------
-# ✨ 1) NUOVI IMPORT
-from view.convergence_plot import (
-    plot_convergence_R_multi_via_runner,
-    plot_convergence_N_multi_via_runner,
-)
-# ✨ 2) DEFAULT SEEDS PER L’OVERLAY
-SEEDS = (101, 102, 103, 104, 105)
-
-# ✨ 3) RUNNER FACTORY: una run per seed -> serie cumulativa
-def _make_runner_R(lam, measure_s, warmup_s):
-    def _runner(scn, seed):
-        model = EcommerceModel(scn, seed=seed)
-        model.set_arrival_rate(lam)
-        res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, verbose=False)
-        return res.get("R_series_cum", [])
-    return _runner
-
-def _make_runner_N(lam, measure_s, warmup_s):
-    def _runner(scn, seed):
-        model = EcommerceModel(scn, seed=seed)
-        model.set_arrival_rate(lam)
-        res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s, verbose=False)
         N_cum = res.get("N_series_cum", [])
-        if not N_cum:
-            R_cum = res.get("R_series_cum", [])
-            N_cum = [(t, lam * y) for (t, y) in R_cum]  # fallback Little
-        return N_cum
-    return _runner
+        if not N_cum and R_cum:
+            N_cum = [(t, lam * y) for (t, y) in R_cum]
+        R_list.append(R_cum)
+        N_list.append(N_cum)
 
-# ✨ 4) FUNZIONE CHE CREA I DUE OVERLAY (R e N) PER UNO SCENARIO
-def _run_convergence_overlay_plots_for_scenario(
-    scn: Scenario,
-    *,
-    lam,
-    measure_s: float,
-    warmup_s: float,
-    seeds=SEEDS,
-    outroot: str | Path = "out",
-) -> None:
-    outdir = Path(outroot) / _slug(scn.name)
-    outdir.mkdir(parents=True, exist_ok=True)
-    scn_slug = _slug(scn.name)
+        # 3) salva il nuovo stato (avanzato) per la run successiva
+        last_state = _snapshot_streams()
+        print(f"[INFO] Stato RNG fine-run {k}: {last_state}")
 
-    # --- Overlay R(t)
+    # --- plot overlay (R e N)
+    labels = [f"run {i+1}" for i in range(runs)]
+
     title_R = f"{scn.name} — R(t) overlay  λ={lam:.3f}"
     png_R = outdir / f"warmup_R_multi_{scn_slug}_lam{lam:.2f}_W{int(warmup_s)}_M{int(measure_s)}.png"
-    plot_convergence_R_multi_via_runner(
-        _make_runner_R(lam, measure_s, warmup_s),
-        seeds=seeds,
-        lam=lam,
-        scn=scn,
-        title=title_R,
-        outfile=str(png_R),
-        show=False,
-    )
+    plot_convergence_R_multi(R_list, lam=lam, scn=scn, title=title_R,
+                             labels=labels, outfile=str(png_R), show=False)
     print(f"[OK] Overlay R salvato: {png_R}")
 
-    # --- Overlay N(t)
     title_N = f"{scn.name} — N(t) overlay  λ={lam:.3f}"
     png_N = outdir / f"warmup_N_multi_{scn_slug}_lam{lam:.2f}_W{int(warmup_s)}_M{int(measure_s)}.png"
-    plot_convergence_N_multi_via_runner(
-        _make_runner_N(lam, measure_s, warmup_s),
-        seeds=seeds,
-        lam=lam,
-        scn=scn,
-        title=title_N,
-        outfile=str(png_N),
-        show=False,
-    )
+    plot_convergence_N_multi(N_list, lam=lam, scn=scn, title=title_N,
+                             labels=labels, outfile=str(png_N), show=False)
     print(f"[OK] Overlay N salvato: {png_N}")
 
-# ✨ 5) MODIFICA DENTRO run_phase_convergence: usa l’overlay (puoi lasciare anche i singoli)
+# ---------------- entrypoint ----------------
 def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
     outdir = Path("out")
     outdir.mkdir(parents=True, exist_ok=True)
@@ -254,25 +119,17 @@ def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
 
     for path in yaml_files:
         scn = Scenario.from_yaml(str(path))
-
         lam = 0.33
         measure_s = 86_400.0  # 1 giorno
         warmup_s = 0.0
 
-        # (opzionale) mantieni il vecchio plot singolo:
-        # print("[USO] warmup — R(t) vs tempo (1 run per λ)")
-        # _run_convergence_R_plot_for_scenario(scn, lam=lam, measure_s=measure_s, warmup_s=warmup_s, seed=SEED0, outroot="out")
-        # print("[USO] warmup — N(t) vs tempo (1 run per λ)")
-        # _run_convergence_N_plot_for_scenario(scn, lam=lam, measure_s=measure_s, warmup_s=warmup_s, seed=SEED0, outroot="out")
-
-        # 🔵 NUOVO: overlay 5 seed nello stesso plot
-        print("[USO] warmup — overlay R(t), N(t) (5 seed)")
-        _run_convergence_overlay_plots_for_scenario(
+        print(f"[USO] warmup — overlay R(t), N(t) con continuità RNG (runs={RUNS}, seed0={INIT_SEED})")
+        _run_overlay_continued_rng(
             scn,
             lam=lam,
             measure_s=measure_s,
             warmup_s=warmup_s,
-            seeds=SEEDS,
+            runs=RUNS,
+            init_seed=INIT_SEED,
             outroot="out",
         )
-

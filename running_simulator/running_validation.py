@@ -1,9 +1,8 @@
 from model.scenario import Scenario
 from pathlib import Path
 
-import os, re, math
+import os, re
 import numpy as np
-import statistics as stats
 import matplotlib.pyplot as plt
 from model.ecommerce import EcommerceModel
 

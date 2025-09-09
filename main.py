@@ -12,13 +12,11 @@ DEFAULT_CONFIG_DIR = "config"
 def main() -> None:
     config_dir = DEFAULT_CONFIG_DIR
 
-<<<<<<< Updated upstream
-    print(f"[INFO] finite horizon run - validation study")
+    #print(f"[INFO] finite horizon run - validation study")
     # run_phase_validation(config_dir=config_dir)
-=======
+
     #print(f"[INFO] finite horizon run - validation study")
     #run_phase_validation(config_dir=config_dir)
->>>>>>> Stashed changes
 
     print(f"[INFO] finite horizon run - convergence study")
     run_phase_convergence(config_dir=config_dir)
