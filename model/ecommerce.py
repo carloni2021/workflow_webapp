@@ -60,10 +60,8 @@ class EcommerceModel:
 
             mean_iat = 1.0 / lam
             use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
-            # iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
             if self.scenario.arrival_process == "exp":
-                #stampa di debug
-                iat = Exponential(mean_iat)
+                iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
             elif self.scenario.arrival_process == "hyperexp":
                 iat = HyperExp2Balanced(mean_iat, p=0.10)
             else:
@@ -91,9 +89,7 @@ class EcommerceModel:
         campiona Exp(mean = D_s) dove D_s è nello Scenario per (stazione, class_id).
         Lo switch di stream RNG è "safe": se lo stream dedicato non esiste, ripiega.
         """
-        #print debug
         mean = float(self.scenario.service_demands.get(sname).get(class_id))
-        # print(class_id,mean)
         kindA=self.scenario.service_dist.get("A")
         kindB=self.scenario.service_dist.get("B")
         kindP=self.scenario.service_dist.get("P")
@@ -269,7 +265,7 @@ class EcommerceModel:
             "N_mean": N_mean,
         }
 
-        # --- Serie R(t) cumulativa per analizzare il warmup (nessuna logica per-bin) ---
+        # --- Serie R(t) cumulativa per analizzare il warmup ---
         jobs_puri = [
             j for j in self.jobs_completed
             if (t_start <= j.completion_time <= t_end) and (j.arrival_time >= t_start)
@@ -282,33 +278,6 @@ class EcommerceModel:
             s += (j.completion_time - j.arrival_time)
             R_series_cum.append((j.completion_time, s / i))
         out["R_series_cum"] = R_series_cum
-
-        return out
-
-        # out = {
-        #     "R_mean_s": R_mean,
-        #     "X_jobs_per_s": X,
-        #     "U_A": U_A, "U_B": U_B, "U_P": U_P,
-        #     "n_completed": len(completed),
-        #     "N_mean": N_mean,
-        # }
-
-        # # --- Serie R(t): cumulativa e per-bin per analizzare il warmup ---
-        # # 1) Media cumulativa del tempo di risposta in funzione del tempo di completamento
-        # jobs_sorted = sorted(self.jobs_completed, key=lambda j: j.completion_time)
-        # R_series_cum = []
-        # s = 0.0
-        # n = 0
-        # for j in jobs_sorted:
-        #     # consideriamo solo i job "puri" della finestra di misura
-        #     if not (t_start <= j.completion_time <= t_end):
-        #         continue
-        #     if j.arrival_time < t_start:
-        #         continue
-        #     n += 1
-        #     s += (j.completion_time - j.arrival_time)
-        #     R_series_cum.append((j.completion_time, s / n))
-        # out["R_series_cum"] = R_series_cum
 
         return out
 

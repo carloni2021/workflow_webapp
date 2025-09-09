@@ -56,29 +56,3 @@ def HyperExp2Balanced(mean: float, p: float) -> float:
     m1 = mean / (2.0 * p)
     m2 = mean / (2.0 * (1.0 - p))
     return Exponential(m1) if Bernoulli(p) else Exponential(m2)
-
-
-def scv_from_p(p: float) -> float:
-    """
-    Coefficiente di variazione al quadrato (SCV) dell'H2 bilanciata dato p.
-    c^2 = 1/(2 p (1-p)) - 1
-    """
-    if not (0.0 < p < 1.0):
-        raise ValueError("p deve essere in (0,1)")
-    return 1.0 / (2.0 * p * (1.0 - p)) - 1.0
-
-
-def p_from_scv(c2: float) -> float:
-    """
-    Ricava p da un SCV desiderato c2 (>1). Ritorna il valore di p ∈ (0, 0.5].
-    (Esiste anche l'altro simmetrico 1-p).
-
-    Formula inversa (bilanciata):
-        p = (1 - sqrt((c2 - 1)/(c2 + 1))) / 2
-
-    Per ottenere l'altro ramo (>=0.5), usa 1 - p.
-    """
-    if not (c2 > 1.0):
-        raise ValueError("c2 (SCV) deve essere > 1 per un'iperesponenziale più variabile dell'esponenziale")
-    import math
-    return (1.0 - math.sqrt((c2 - 1.0) / (c2 + 1.0))) / 2.0

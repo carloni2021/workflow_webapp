@@ -1,7 +1,5 @@
 # main.py
 from __future__ import annotations
-import sys
-import argparse
 
 from pathlib import Path
 
@@ -15,20 +13,11 @@ DEFAULT_CONFIG_DIR = "config"
 
 # --- import dalla struttura a pacchetti ---
 from model.scenario import Scenario
-from view.validation_plot1 import sweep_response_vs_lambda            # R(λ) transiente
 from view.validation_plot2 import sweep_response_vs_lambda_steady            # R(λ) transiente
-from view.validation_plot_users import sweep_users_vs_lambda          # N(λ) transiente
 
 def _slug(s: str) -> str:
     s = s.lower()
     return "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in s).strip("_")
-
-
-def _frange(start: float, end: float, step: float):
-    x = float(start)
-    while x <= end + 1e-12:
-        yield round(x, 10)
-        x = round(x + step, 10)
 
 def _run_convergence_R_plot_for_scenario(
     scn: Scenario,
@@ -256,10 +245,6 @@ def _preflight_check_steady() -> tuple[bool, str]:
         return True, "[INFO] Plotter steady mancante (view/validation_plot_steady.py). La fase 'r' proseguirà solo se lo aggiungi."
     return True, ""
 
-# File di output CSV
-OUT_CSV_FINITE = "out/summary_finite.csv"
-OUT_FILE_PATH = "out/"  # Usato solo per creare la cartella
-
 def run_phase_steady(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
     """
     Caso STEADY-STATE (batch means):
@@ -297,36 +282,6 @@ def run_phase_steady(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
 
 # ------------------------------- ENTRYPOINT ----------------------------------
 #commento per evitare questa funzione
-
-def _choose_mode_via_io() -> tuple[str, str]:
-
-    parser = argparse.ArgumentParser(description="Selezione della fase da eseguire")
-    parser.add_argument("--mode", choices=["finite", "steady"], help="Caso da eseguire")
-    parser.add_argument("--config", default=DEFAULT_CONFIG_DIR, help="Cartella YAML degli scenari")
-    args, _ = parser.parse_known_args()
-
-    if args.mode:
-        return args.mode, args.config
-
-    # Interattivo
-    if sys.stdin.isatty():
-        scelta = input("Vuoi eseguire la fase a orizzonte finito (f) o la fase a regime (r)? (f/r): ").strip().lower()
-        mode = "steady" if scelta in ("r", "s", "steady") else "finite"
-        return mode, args.config
-
-    # Default non interattivo
-    return "finite", args.config
-
-
-#def main() -> None:
-#    config_dir=DEFAULT_CONFIG_DIR
-#    mode="finite"
-#    print(f"[INFO] modalità={mode} | config_dir={config_dir}")
-#
- #   if mode == "steady":
-  #      run_phase_steady(config_dir=config_dir)
-   # else:
-    #    run_phase_finite(config_dir=config_dir)
 
 def main() -> None:
     config_dir = DEFAULT_CONFIG_DIR
