@@ -75,19 +75,3 @@ def demand_lognormal(mean: float, c2: float) -> float:
         return 0.0
     mu, sigma = lognormal_params_from_mean_scv(mean, c2)
     return Lognormal(mu, sigma)
-
-
-# ---------- Wrapper per stazioni A, B, P ----------
-def demand_A(mean: float, k: int = 3) -> float:
-    """Erlang-k per stazione A. Default k=3 → SCV=1/3."""
-    return demand_erlang(mean, k)
-
-
-def demand_P(mean: float, k: int = 2) -> float:
-    """Erlang-k per stazione P. Default k=2 → SCV=1/2."""
-    return demand_erlang(mean, k)
-
-
-def demand_B(mean: float, c2: float = 2.0) -> float:
-    """Lognormale per stazione B. Default SCV=2.0."""
-    return demand_lognormal(mean, c2)

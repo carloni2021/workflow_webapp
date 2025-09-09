@@ -1,23 +1,14 @@
-
-
-
-import os, re, math
+import os, re
 import numpy as np
 import statistics as stats
 import matplotlib.pyplot as plt
+from rndbook.ci_95 import ci95_hw
 
 from model.ecommerce import EcommerceModel
 
 # -------- util --------
 def _slug(txt: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", str(txt)).strip("-").lower()
-
-def _ci95_hw_from_batches(values):
-    n = len(values)
-    if n < 2:
-        return float("nan")
-    s = stats.stdev(values)            # stdev campionaria sui batch
-    return 1.96 * s / (n ** 0.5)       # 95% approx
 
 # -------- sweep steady-state (batch means) --------
 def sweep_response_vs_lambda_steady(
@@ -52,7 +43,7 @@ def sweep_response_vs_lambda_steady(
         series = m.run_batch_means(n_batches=n_batches, jobs_per_batch=jobs_per_batch)
         Rs = series["R_mean_s_batches"]              # lista per-batch
         R_bar = stats.mean(Rs) if Rs else float("nan")
-        hw = _ci95_hw_from_batches(Rs) if Rs else float("nan")
+        m,hw,n = ci95_hw(Rs) if Rs else float("nan")
 
         means.append(R_bar)
         hw95.append(hw)
