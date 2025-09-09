@@ -1,3 +1,10 @@
+from pathlib import Path
+from model.ecommerce import EcommerceModel, Scenario
+from rndbook.ci_95 import ci95_safe
+
+DEFAULT_CONFIG_DIR = "config"
+SEED0=1234
+
 def run_single_lambda_batch_means(config_dir: str = None,
                                   lam: float = 0.33,
                                   n_batches: int = 64) -> None:

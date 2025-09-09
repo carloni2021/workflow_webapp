@@ -1,11 +1,18 @@
+import re
+
 from pathlib import Path
 from model.ecommerce import EcommerceModel
 from model.scenario import Scenario
 from view.convergence_plot import plot_convergence_R, plot_convergence_N
 
 DEFAULT_CONFIG_DIR = "config"
+SEED0=1234
 
-#finite horizon run - convergence study
+# ---------------- utils ----------------
+def _slug(txt: str | None) -> str:
+    return re.sub(r'[^A-Za-z0-9._-]+', '-', str(txt or "scenario")).strip('-').lower()
+
+# finite horizon run - convergence study
 def _run_convergence_R_plot_for_scenario(
     scn: Scenario,
     *,
@@ -81,7 +88,7 @@ def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
             outroot="out",
         )
 
-def _run_convergence_N_plot_for_scenario(  # <— NEW
+def _run_convergence_N_plot_for_scenario(
         scn: Scenario,
         *,
         lam,

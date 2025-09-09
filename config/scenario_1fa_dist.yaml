@@ -1,5 +1,5 @@
 name: "1FA (dist)"
-arrival_process: "exp"
+arrival_process: "hyperexp"
 service_dist:
     A: "erlang"
     B: "lognorm"
