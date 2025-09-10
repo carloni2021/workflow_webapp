@@ -15,8 +15,8 @@ def main() -> None:
     #print(f"[INFO] finite horizon run - validation study")
     run_phase_validation(config_dir=config_dir)
 
-    print(f"[INFO] finite horizon run - convergence study")
-    run_phase_convergence(config_dir=config_dir)
+    #print(f"[INFO] finite horizon run - convergence study")
+    #run_phase_convergence(config_dir=config_dir)
 
     #print(f"[INFO] batch-means one-λ | λ=0.33")
     run_single_lambda_batch_means(config_dir=config_dir, n_batches=64)
