@@ -366,7 +366,7 @@ class EcommerceModel:
         """
         assert n_batches > 0 and jobs_per_batch > 0
 
-        lam = 1.0 / (float(self.scenario.get_interarrival_mean()) * 0.85)
+        lam = 1.0 / float(self.scenario.get_interarrival_mean())
         self.set_arrival_rate(float(lam))
 
         self._batcher = EcommerceModel._BatchMeans(self, n_batches, jobs_per_batch)
@@ -486,7 +486,7 @@ class EcommerceModel:
         Ritorna (series, diag) dove series è l'output di run_batch_means e diag contiene b, L_cut, ecc.
         """
         diag = self.suggest_b_via_cutoff(lam, K=K, n_jobs_calib=n_jobs_calib,warmup_jobs=warmup_jobs, run=run, z=z)
-        b = 46 #diag["b"]
+        b = 46
         series = self.run_batch_means(n_batches=n_batches, jobs_per_batch=b)
         return series, diag
 

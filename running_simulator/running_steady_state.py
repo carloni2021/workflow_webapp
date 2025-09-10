@@ -58,8 +58,6 @@ def run_single_lambda_batch_means(config_dir: str = None,
 
     for path in yaml_files:
 
-
-
         scn = Scenario.from_yaml(str(path))
         lam = 1.0 / (float(scn.get_interarrival_mean()))
         print(f"[ONE-λ] Scenario: {scn.name}  |  λ={lam:.3f}")
