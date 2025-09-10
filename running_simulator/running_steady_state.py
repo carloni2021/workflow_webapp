@@ -6,7 +6,6 @@ DEFAULT_CONFIG_DIR = "config"
 SEED0=1234
 
 def run_single_lambda_batch_means(config_dir: str = None,
-                                  lam: float = 0.33,
                                   n_batches: int = 64) -> None:
     """
     Esegue il batch-means per UN SOLO λ su tutti gli scenari nella cartella di config.
@@ -49,7 +48,6 @@ def run_single_lambda_batch_means(config_dir: str = None,
             s = s.replace(ch, "_")
         return s
 
-    print(f"[INFO] batch-means one-λ | config_dir={base_dir} | λ={lam}")
 
     # --- cerca scenari YAML ---
     from pathlib import Path as _Path
@@ -59,7 +57,11 @@ def run_single_lambda_batch_means(config_dir: str = None,
         return
 
     for path in yaml_files:
+
+
+
         scn = Scenario.from_yaml(str(path))
+        lam = 1.0 / (float(scn.get_interarrival_mean()))
         print(f"[ONE-λ] Scenario: {scn.name}  |  λ={lam:.3f}")
 
         # 1) run auto (stima b via cutoff ACF + batch-means)

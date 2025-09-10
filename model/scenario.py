@@ -30,6 +30,9 @@ class Scenario:
         # Se heavy_load=True, riduce l’interarrivo medio del 15% → più job al secondo.
         return self.interarrival_mean_s / 1.15 if self.heavy_load else self.interarrival_mean_s
 
+    def get_heavy_load(self) -> bool:
+        return self.heavy_load
+
     # Legge un file .yaml e costruisce direttamente l’oggetto Scenario.
     @staticmethod
     def from_yaml(path: str) -> "Scenario":

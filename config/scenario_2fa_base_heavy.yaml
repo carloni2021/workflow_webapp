@@ -1,5 +1,5 @@
 # 2FA con carico +15% sugli arrivi
-name: "2FA (SCA) - heavy"
+name: "2FA (base) - heavy"
 arrival_process: "exp"
 service_dist:
     A: "exp"

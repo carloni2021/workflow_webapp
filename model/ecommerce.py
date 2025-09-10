@@ -355,7 +355,7 @@ class EcommerceModel:
                 else:
                     self.reset_batch_state()
 
-    def run_batch_means(self, *, n_batches: int, jobs_per_batch: int, lam: float | None = None) -> Dict[
+    def run_batch_means(self, *, n_batches: int, jobs_per_batch: int) -> Dict[
         str, List[float]]:
         """
         Esegue la run a regime (batch means) e restituisce le serie per-batch:
@@ -366,9 +366,7 @@ class EcommerceModel:
         """
         assert n_batches > 0 and jobs_per_batch > 0
 
-        # Se lam non è passato, usa quello dallo Scenario
-        if lam is None:
-            lam = 1.0 / float(self.scenario.get_interarrival_mean())
+        lam = 1.0 / (float(self.scenario.get_interarrival_mean()) * 0.85)
         self.set_arrival_rate(float(lam))
 
         self._batcher = EcommerceModel._BatchMeans(self, n_batches, jobs_per_batch)
@@ -478,7 +476,7 @@ class EcommerceModel:
             "r_near_cut_abs": r_near_abs,  # in valore assoluto
         }
 
-    def run_batch_means_auto_single_lambda(self, *, lam: float = 0.33,
+    def run_batch_means_auto_single_lambda(self, *, lam: float,
                                            n_batches: int = 64, K: int = 200,
                                            n_jobs_calib: int = 50000, warmup_jobs: int = 5000,
                                            run: int = 3, z: float = 1.96):
@@ -488,7 +486,7 @@ class EcommerceModel:
         Ritorna (series, diag) dove series è l'output di run_batch_means e diag contiene b, L_cut, ecc.
         """
         diag = self.suggest_b_via_cutoff(lam, K=K, n_jobs_calib=n_jobs_calib,warmup_jobs=warmup_jobs, run=run, z=z)
-        b = 44 #diag["b"]
-        series = self.run_batch_means(n_batches=n_batches, jobs_per_batch=b, lam=lam)
+        b = 46 #diag["b"]
+        series = self.run_batch_means(n_batches=n_batches, jobs_per_batch=b)
         return series, diag
 

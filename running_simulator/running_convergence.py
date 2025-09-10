@@ -119,7 +119,9 @@ def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:
 
     for path in yaml_files:
         scn = Scenario.from_yaml(str(path))
-        lam = 0.33
+        print(f"[SCN]\n\n {scn.get_heavy_load()}\n\n")
+        lam = 1.0 / (float(scn.get_interarrival_mean()))
+        print(f"[SCN]\n\n {lam}\n\n")
         measure_s = 86_400.0  # 1 giorno
         warmup_s = 0.0
 
