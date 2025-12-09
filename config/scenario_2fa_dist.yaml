@@ -1,0 +1,21 @@
+name: "2FA (dist)"
+arrival_process: "hyperexp"
+service_dist:
+    A: "erlang"
+    B: "lognorm"
+    P: "erlang"
+interarrival_mean_s: 3.0
+heavy_load: false
+service_demands:
+  A:
+    Class1: 0.2
+    Class2: 0.4
+    Class3: 0.15      # ↑ vs 1FA
+  B:
+    Class1: 0.8
+    Class2: 0.0
+    Class3: 0.0
+  P:
+    Class1: 0.0
+    Class2: 0.7       # ↑ vs 1FA
+    Class3: 0.0

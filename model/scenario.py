@@ -15,6 +15,11 @@ import yaml
 class Scenario:
     name: str
     service_demands: Dict[str, Dict[str, float]]
+    arrival_process: str
+    #rappresenta le distribuzioni dei server in questo modo service_dist:A: "exp" B: "exp" P: "exp"
+    service_dist: Dict[str, str] = field(default_factory=lambda: {"A": "exp", "B": "exp", "P": "exp"})
+
+    type: str = "tutto_exp"  # "tutto_exp" o "realistico"
     capacities: Dict[str, int] = field(default_factory=lambda: {"A": 1, "B": 1, "P": 1})
     interarrival_mean_s: float = 3.0
     run_s: float = 10000.0
@@ -24,6 +29,9 @@ class Scenario:
     def get_interarrival_mean(self) -> float:
         # Se heavy_load=True, riduce l’interarrivo medio del 15% → più job al secondo.
         return self.interarrival_mean_s / 1.15 if self.heavy_load else self.interarrival_mean_s
+
+    def get_heavy_load(self) -> bool:
+        return self.heavy_load
 
     # Legge un file .yaml e costruisce direttamente l’oggetto Scenario.
     @staticmethod

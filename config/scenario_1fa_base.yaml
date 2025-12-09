@@ -1,0 +1,22 @@
+# Scenario SCA: autenticazione a 1 fattori (1FA) - Caso base con distribuzioni esponenziali
+name: "1FA (base)"
+arrival_process: "exp"
+service_dist:
+    A: "exp"
+    B: "exp"
+    P: "exp"
+interarrival_mean_s: 3.0
+heavy_load: false
+service_demands:
+  A:
+    Class1: 0.2
+    Class2: 0.4
+    Class3: 0.1
+  B:
+    Class1: 0.8
+    Class2: 0.0
+    Class3: 0.0
+  P:
+    Class1: 0.0
+    Class2: 0.4
+    Class3: 0.0

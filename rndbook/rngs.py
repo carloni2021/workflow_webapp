@@ -155,32 +155,4 @@ def selectStream(index):
   stream = index % STREAMS
   if (initialized == 0) and (stream != 0):   #/* protect against        */
     plantSeeds(DEFAULT)                     #/* un-initialized streams */
-    
-
-
-  
-def testRandom():
-  # /* -------------------------------------------------------------------
-  #  * Use this (optional) procedure to test for a correct implementation.
-  #  * -------------------------------------------------------------------
-  #  */
-
-  ok = False
-
-  selectStream(0)                  #/* select the default stream */
-  putSeed(1)                       #/* and set the state to 1    */
-  for i in range(0,10000):
-    u = random()
-  x = getSeed()                    #/* get the new state value   */
-  ok = (x == CHECK)                #/* and check for correctness */
-  
-  selectStream(1)                  #/* select stream 1                 */
-  plantSeeds(1)                    #/* set the state of all streams    */
-  x = getSeed()                    #/* get the state of stream 1       */
-  ok = (ok==True) and (x == A256)           #/* x should be the jump multiplier */
-  if (ok==True):
-    print("\n The implementation of Rngs.py is correct")
-  else:
-    print("\n ERROR - the implementation of Rngs.py is not correct")
-
   

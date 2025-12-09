@@ -1,0 +1,22 @@
+# 1FA con scaling su B: server B raddoppia la capacità (blade più veloce)
+name: "1FA (base) - heavy - B x2"
+arrival_process: "exp"
+service_dist:
+    A: "exp"
+    B: "exp"
+    P: "exp"
+interarrival_mean_s: 3.0
+heavy_load: true
+service_demands:
+  A:
+    Class1: 0.2
+    Class2: 0.4
+    Class3: 0.1
+  B:
+    Class1: 0.4   # ← scaling su B
+    Class2: 0.0
+    Class3: 0.0
+  P:
+    Class1: 0.0
+    Class2: 0.4
+    Class3: 0.0
