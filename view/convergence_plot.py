@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 import matplotlib.pyplot as plt
 
+STD_COLORS = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple']
+
 # --- MULTI-SEED OVERLAY PLOTS -------------------------------------------------
 
 def plot_convergence_R_multi(R_cum_list, *, lam=None, scn=None, title=None,
@@ -29,10 +31,12 @@ def plot_convergence_R_multi(R_cum_list, *, lam=None, scn=None, title=None,
     if labels is None:
         labels = [f"run {i+1}" for i in range(len(R_cum_list))]
 
-    for curve, lab in zip(R_cum_list, labels):
+    for i, (curve, lab) in enumerate(zip(R_cum_list, labels)):
         if curve:
             t, y = zip(*curve)
-            plt.plot(t, y, linewidth=1.8, alpha=0.9, label=str(lab))
+            # Seleziona il colore ciclicamente
+            c = STD_COLORS[i % len(STD_COLORS)]
+            plt.plot(t, y, color=c, linewidth=1.8, alpha=0.9, label=str(lab))
 
     # Linea teorica (se arrivi/servizi esponenziali)
     arr_proc = _get(scn, "arrival_process", None)

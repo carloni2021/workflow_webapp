@@ -157,24 +157,18 @@ class EcommerceModel:
 
     # ---------- Run: orizzonte finito ----------
     def run_finite(self, *, horizon_s: float, warmup_s: float = 0.0,
-                   verbose: bool = True) -> Dict:
+                   verbose: bool = True, trace_convergence: bool = False) -> Dict:
         """
-        Esegue una run a orizzonte finito (transiente) e misura le metriche nella finestra [warmup_s, horizon_s].
-        Ritorna:
-            - R_mean_s        : tempo di risposta medio nella finestra
-            - X_jobs_per_s    : throughput (completamenti / durata finestra)
-            - U_A, U_B, U_P   : utilizzazioni medie per stazione nella finestra
-            - n_completed     : # job completati nella finestra
-            - N_mean          : stima del numero medio di utenti nel sistema via Little (X * R)
-            - N_series        : opzionale, lista di (t_centro_finestra, N_i) per studiare la convergenza
+        trace_convergence=True: Calcola e restituisce anche la serie temporale
+        con media e intervallo di confidenza progressivi (per i grafici di convergenza).
         """
         assert horizon_s > 0.0 and horizon_s >= warmup_s
 
-        # reset log locali per la run
+        # Reset
         self.jobs_completed = []
         self._arrival_times = []
 
-        # Se non è stato impostato da fuori, usa il valore dallo Scenario
+        # Setup lambda se mancante
         if self.lambda_req_s <= 0.0:
             try:
                 lam_from_scn = 1.0 / float(self.scenario.get_interarrival_mean())
@@ -182,15 +176,13 @@ class EcommerceModel:
                 lam_from_scn = 1.0 / float(getattr(self.scenario, "interarrival_mean_s", 1.0))
             self.set_arrival_rate(lam_from_scn)
 
-        # --- snapshot delle aree busy all'inizio della finestra di misura ---
+        # --- Snapshot aree busy ---
         t0 = float(warmup_s)
         snapshot = {"t0": 0.0, "A": 0.0, "B": 0.0, "P": 0.0}
 
         def _take_snapshot():
-            # attende il warmup e poi fotografa le aree
             if t0 > 0.0:
                 yield self.env.timeout(t0)
-            # aggiorna le aree prima di leggerle
             self.A._area_accumulate();
             self.B._area_accumulate();
             self.P._area_accumulate()
@@ -200,44 +192,25 @@ class EcommerceModel:
             snapshot["P"] = self.P.busy_area
 
         self.env.process(_take_snapshot())
-
-        # --- avvio processi: arrivi + (le visite sono lanciate dal flow alla creazione job) ---
         self.env.process(self._arrival_process())
-
-        # --- run fino all'orizzonte ---
         self.env.run(until=horizon_s)
 
-        # --- misure nella finestra [t0, horizon] ---
-        # finalizza integrazione delle aree al tempo corrente
+        # --- Calcolo metriche finali (Standard) ---
         self.A._area_accumulate();
         self.B._area_accumulate();
         self.P._area_accumulate()
-
         t_start = snapshot["t0"]
         t_end = float(horizon_s)
         duration = max(t_end - t_start, 1e-12)
 
-        # Completamenti nella finestra
         completed = [j for j in self.jobs_completed if (t_start <= j.completion_time <= t_end)]
-        R = [(j.completion_time - j.arrival_time) for j in completed if j.arrival_time >= t_start]
-        R_mean = (stats.mean(R) if R else float("nan"))
+        R_vals = [(j.completion_time - j.arrival_time) for j in completed if j.arrival_time >= t_start]
+
+        R_mean = (stats.mean(R_vals) if R_vals else float("nan"))
         X = (len(completed) / duration) if duration > 0 else float("nan")
+        N_mean = (X * R_mean) if (R_mean == R_mean and X == X) else float("nan")
 
-        # Stima del tasso d'arrivo osservato nella finestra
-        arrivals_in = sum((t_start <= t <= t_end) for t in self._arrival_times)
-        lambda_hat = arrivals_in / duration if duration > 0 else float("nan")
-        lambda_set = float(self.lambda_req_s)
-
-        if verbose:
-            print(
-                f"[CHECK] lambda_set={lambda_set:.3f}  lambda_hat={lambda_hat:.3f}  arrivals_in={arrivals_in}  duration={int(duration)}s")
-            print(f"[DEBUG R] t0={t_start}  horizon={t_end}  duration={duration}  completed={len(completed)}")
-            if R:
-                j0 = min(completed, key=lambda j: j.completion_time)
-                print(
-                    f"[DEBUG R] first R in window = {j0.completion_time - j0.arrival_time:.4f}s (comp={j0.completion_time:.2f}, arr={j0.arrival_time:.2f})")
-
-        # Utilizzazioni: differenza d'area / (capacity * durata) nella finestra
+        # Utilizzazioni
         dA = self.A.busy_area - snapshot["A"]
         dB = self.B.busy_area - snapshot["B"]
         dP = self.P.busy_area - snapshot["P"]
@@ -245,39 +218,49 @@ class EcommerceModel:
         U_B = dB / (self.B.capacity * duration)
         U_P = dP / (self.P.capacity * duration)
 
-        if verbose:
-            print(f"[DEBUG U] areas ΔA={dA:.2f}  ΔB={dB:.2f}  ΔP={dP:.2f}")
-            # Check teorico (hard-coded per il tuo 1FA base; cambia se usi altri YAML)
-            D = {"A": 0.7, "B": 0.8, "P": 0.4}
-            U_expected = {s: lambda_set * D[s] for s in D}
-            print(
-                f"[CHECK] λ={lambda_set:.3f}  U_atteso: A={U_expected['A']:.3f}  B={U_expected['B']:.3f}  P={U_expected['P']:.3f}")
-            print(f"[CHECK] U_misurato: A={U_A:.3f}  B={U_B:.3f}  P={U_P:.3f}")
-
-        # Stima L = λ W (numero medio di utenti nel sistema)
-        N_mean = (X * R_mean) if (R_mean == R_mean and X == X) else float("nan")
-
         out = {
-            "R_mean_s": R_mean,
-            "X_jobs_per_s": X,
+            "R_mean_s": R_mean, "X_jobs_per_s": X, "N_mean": N_mean,
             "U_A": U_A, "U_B": U_B, "U_P": U_P,
-            "n_completed": len(completed),
-            "N_mean": N_mean,
+            "n_completed": len(completed)
         }
 
-        # --- Serie R(t) cumulativa per analizzare il warmup ---
-        jobs_puri = [
-            j for j in self.jobs_completed
-            if (t_start <= j.completion_time <= t_end) and (j.arrival_time >= t_start)
-        ]
-        jobs_sorted = sorted(jobs_puri, key=lambda j: j.completion_time)
+        # --- LOGICA OPZIONALE: Trace per convergenza ---
+        if trace_convergence:
+            jobs_puri = [j for j in self.jobs_completed
+                         if (t_start <= j.completion_time <= t_end) and (j.arrival_time >= t_start)]
+            jobs_sorted = sorted(jobs_puri, key=lambda j: j.completion_time)
 
-        R_series_cum = []
-        s = 0.0
-        for i, j in enumerate(jobs_sorted, start=1):
-            s += (j.completion_time - j.arrival_time)
-            R_series_cum.append((j.completion_time, s / i))
-        out["R_series_cum"] = R_series_cum
+            R_stats = []  # (time, mean, hw)
+
+            # Welford algorithm
+            w_count = 0
+            w_mean = 0.0
+            w_M2 = 0.0
+
+            for j in jobs_sorted:
+                val = j.completion_time - j.arrival_time
+                w_count += 1
+                delta = val - w_mean
+                w_mean += delta / w_count
+                delta2 = val - w_mean
+                w_M2 += delta * delta2
+
+                hw = 0.0
+                if w_count > 1:
+                    var = w_M2 / (w_count - 1)
+                    if var > 0:
+                        hw = 1.96 * math.sqrt(var) / math.sqrt(w_count)
+
+                R_stats.append((j.completion_time, w_mean, hw))
+
+            out["R_convergence_trace"] = R_stats
+            # Mettiamo anche una traccia semplice per N (approssimata N ~ lambda * R)
+            lam_obs = len(completed) / duration if duration > 0 else 0
+            out["N_convergence_trace"] = [(t, m * lam_obs, h * lam_obs) for (t, m, h) in R_stats]
+
+        # Per compatibilità con i vecchi plot overlay (se servono ancora)
+        if "R_convergence_trace" in out:
+            out["R_series_cum"] = [(t, m) for (t, m, h) in out["R_convergence_trace"]]
 
         return out
 
