@@ -54,14 +54,11 @@ def _run_reps_for_lambda_R_and_N(
 
     for r in range(n_reps):
 
-        # (A) PRIMA della replica: riparti dallo stato salvato
-        _restore_streams(stream_state)
-
-        # (B) reset del SISTEMA: nuovo modello...
+        # (A) reset del SISTEMA: nuovo modello...
         m = EcommerceModel(scn, seed=seed_base)   # fa plantSeeds(...) nel __init__
         m.set_arrival_rate(lam)
 
-        # ...ma SUBITO DOPO ripristina gli stream allo stato voluto
+        # (B) ...ma SUBITO DOPO ripristina gli stream allo stato voluto
         _restore_streams(stream_state)
 
         print(f"[Replica {r}] Stream seeds: {stream_state}")

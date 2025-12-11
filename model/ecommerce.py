@@ -30,7 +30,7 @@ class EcommerceModel:
         self.env = simpy.Environment()
         self.seed = int(seed)
 
-        init_rng_for_replication(self.seed) # Inizializza RNG (tutti i 2andand56 stream) per la replica
+        init_rng_for_replication(self.seed) # Inizializza RNG (tutti i 256 stream) per la replica
 
         self.lambda_req_s = 0.0 # tasso di arrivo (req/s) - inizializzato a 0, va settato con set_arrival_rate() nello sweep
 
