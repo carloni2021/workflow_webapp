@@ -16,10 +16,10 @@ def main() -> None:
     #run_phase_validation(config_dir=config_dir)
 
     #print(f"[INFO] finite horizon run - convergence study")
-    run_phase_convergence(config_dir=config_dir)
+    #run_phase_convergence(config_dir=config_dir)
 
     #print(f"[INFO] batch-means one-λ | λ=0.33")
-    #run_single_lambda_batch_means(config_dir=config_dir, n_batches=64)
+    run_single_lambda_batch_means(config_dir=config_dir, n_batches=64)
 
 if __name__ == "__main__":
     main()
