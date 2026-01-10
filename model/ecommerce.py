@@ -133,6 +133,7 @@ class EcommerceModel:
             self._batcher.on_visit_complete(sname, t_out - t_in)
 
     def job_flow(self, jid: int):
+        #qui vengono gestiti gli arrivi e le visite alle stazioni
         job = JobRecord(id=jid, class_id="Class1", arrival_time=self.env.now)
 
         # Class1: A -> B
@@ -149,6 +150,7 @@ class EcommerceModel:
         yield from self._ps_visit(self.A, "A", job, "Class3")
 
         job.completion_time = self.env.now
+        #fine del workflow del job
         self.jobs_completed.append(job)
 
         # Notifica il completamento di un JOB al batcher (se attivo)
@@ -196,8 +198,8 @@ class EcommerceModel:
         self.env.run(until=horizon_s)
 
         # --- Calcolo metriche finali (Standard) ---
-        self.A._area_accumulate();
-        self.B._area_accumulate();
+        self.A._area_accumulate()
+        self.B._area_accumulate()
         self.P._area_accumulate()
         t_start = snapshot["t0"]
         t_end = float(horizon_s)
