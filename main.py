@@ -25,5 +25,7 @@ def main() -> None:
     #la validazione va svolta sullo stato stazionario, eseguiamo uno stress test di quest'ultimo
     plot_stress_transient(config_path="config/scenario_1fa_base.yaml")
 
+    #verifica della distribuzione iper-esponenziale
+
 if __name__ == "__main__":
     main()
