@@ -29,30 +29,25 @@ La media risultante è mean, indipendentemente da p.
 Lo SCV vale c^2 = 1/(2 p (1-p)) - 1, ≥ 1.
 """
 from rndbook.rvgs import Exponential, Bernoulli
+from rng_setup import use_stream
 
 
-def HyperExp2Balanced(mean: float, p: float) -> float:
-    """
-    Estrae un campione da una H2 bilanciata con media 'mean'.
+def hyperexp2(mean: float, p: float) -> float:
 
-    Parametri
-    ---------
-    mean : float
-        Media target (>0).
-    p : float
-        Probabilità del ramo 1 (0<p<1). Più p è vicino a 0 o 1, più la
-        variabilità è alta.
-
-    Ritorna
-    -------
-    float
-        Un campione casuale.
-    """
     if not (mean > 0.0):
         raise ValueError("mean deve essere > 0")
     if not (0.0 < p < 1.0):
         raise ValueError("p deve essere in (0,1)")
     # NOTA: Exponential(m) attende la *media*, non il tasso.
+
     m1 = mean / (2.0 * p)
     m2 = mean / (2.0 * (1.0 - p))
-    return Exponential(m1) if Bernoulli(p) else Exponential(m2)
+
+    use_stream("arrivals_H2_phase")
+    branch_choice  = Bernoulli(p)
+
+    use_stream("arrivals_H2_time")
+    if branch_choice:
+        return Exponential(m1)
+    else:
+        return Exponential(m2)

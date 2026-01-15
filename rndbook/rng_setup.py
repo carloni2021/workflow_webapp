@@ -9,6 +9,8 @@ STREAMS: Dict[str, int] = {
     "service_A": 1,
     "service_B": 2,
     "service_P": 3,
+    "arrivals_H2_phase": 4,  # Decide se ramo 1 o 2 (Bernoulli)
+    "arrivals_H2_time":  5,  # Genera la durata (Exponential)
     # Altri stream possono essere aggiunti qui
 }
 
