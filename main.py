@@ -18,13 +18,13 @@ def main() -> None:
     config_dir = DEFAULT_CONFIG_DIR
 
     #print(f"[INFO] finite horizon run - validation study")
-    run_phase_validation(config_dir=config_dir)
+    #run_phase_validation(config_dir=config_dir)
 
     #print(f"[INFO] finite horizon run - convergence study")
-    run_phase_convergence(config_dir=config_dir)
+    #run_phase_convergence(config_dir=config_dir)
 
     #print(f"[INFO] batch-means one-λ | λ=0.33")
-    #run_single_lambda_batch_means(config_dir=config_dir, n_batches=64)
+    run_single_lambda_batch_means(config_dir=config_dir, n_batches=64)
 
     #la validazione va svolta sullo stato stazionario, eseguiamo uno stress test di quest'ultimo
     #plot_stress_transient(config_path="config/scenario_1fa_base.yaml")
@@ -55,7 +55,7 @@ def main() -> None:
 """
 
     # Generazione del grafico
-    run_lambda_validation_continuous_rng(config_path="config/scenario_1fa_base.yaml")
+    #run_lambda_validation_continuous_rng(config_path="config/scenario_1fa_base.yaml")
 
     #verifica della distribuzione iper-esponenziale
 

@@ -55,7 +55,7 @@ def run_single_lambda_batch_means(config_dir: str = None,
         cum_cis = np.array(cum_cis)
 
         plt.figure(figsize=(10, 6))
-        plt.scatter(indices, arr, color='gray', alpha=0.3, s=15, label=f'Single Batch {metric_name}')
+        plt.scatter(indices, arr, color='white', alpha=0.3, s=15, label=f'Single Batch {metric_name}')
         plt.plot(indices, cum_means, color=color_main, linewidth=2,
                  label=rf'Cumulative Mean $\overline{{{metric_name}}}$')
         plt.fill_between(indices, cum_means - cum_cis, cum_means + cum_cis, color=color_main, alpha=0.2, label='95% CI')
@@ -118,10 +118,10 @@ def run_single_lambda_batch_means(config_dir: str = None,
         # --- SALVATAGGIO GRAFICI NELLA CARTELLA SPECIFICA ---
         # I file verranno salvati dentro out/1fa-base/BM_R_...
         plot_R_path = scenario_outdir / f"BM_R_convergence_{scenario_slug}_lam{lam:.3f}.png"
-        _plot_batch_convergence(Rb, "R", "s", scn.name, lam, plot_R_path, "tab:blue")
+        _plot_batch_convergence(Rb, "R", "t", scn.name, lam, plot_R_path, "tab:blue")
 
         plot_N_path = scenario_outdir / f"BM_N_convergence_{scenario_slug}_lam{lam:.3f}.png"
-        _plot_batch_convergence(Nb, "N", "-", scn.name, lam, plot_N_path, "tab:orange")
+        _plot_batch_convergence(Nb, "N", "t", scn.name, lam, plot_N_path, "tab:orange")
 
         # --- SALVATAGGIO CSV NELLA CARTELLA SPECIFICA ---
         csv_path = (scenario_outdir / f"batch_means_{scenario_slug}_lam{lam:.3f}.csv")
