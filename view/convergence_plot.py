@@ -75,8 +75,8 @@ def plot_convergence_R_multi(R_cum_list, *, lam=None, scn=None, title=None,
 
     if title:
         plt.title(title)
-    plt.xlabel("Tempo di simulazione [s]")
-    plt.ylabel("Tempo di risposta medio R [s]")
+    plt.xlabel("Tempo di simulazione [t]")
+    plt.ylabel("Tempo di risposta medio R [t]")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -153,8 +153,8 @@ def plot_convergence_N_multi(N_cum_list, *, lam=None, scn=None, title=None,
 
     if title:
         plt.title(title)
-    plt.xlabel("Tempo di simulazione [s]")
-    plt.ylabel("Numero medio N [-]")
+    plt.xlabel("Tempo di simulazione [t]")
+    plt.ylabel("Numero medio N [t]")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()

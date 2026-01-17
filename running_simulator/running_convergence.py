@@ -104,7 +104,7 @@ def _run_overlay_continued_rng(
             fname_R = single_R_dir / f"Run{k}_R_CI_{scn_slug}.png"
             _plot_ci_run(times, means, hws,
                          title=f"Run {k} - R(t) ± Internal CI",
-                         ylabel="Response Time (s)",
+                         ylabel="Response Time R(t)",
                          filename=str(fname_R),
                          color_line=this_run_color,
                          color_fill=this_run_color)
@@ -121,7 +121,7 @@ def _run_overlay_continued_rng(
             fname_N = single_N_dir / f"Run{k}_N_CI_{scn_slug}.png"
             _plot_ci_run(times_n, means_n, hws_n,
                          title=f"Run {k} - N(t) ± Internal CI",
-                         ylabel="Avg Users (N)",
+                         ylabel="Avg Users N(t)",
                          filename=str(fname_N),
                          color_line=this_run_color,
                          color_fill=this_run_color)
@@ -131,13 +131,13 @@ def _run_overlay_continued_rng(
     # Overlay R
     png_overlay_R = outdir / f"Overlay_R_Multi_{scn_slug}.png"
     plot_convergence_R_multi(all_runs_R_means, lam=lam, scn=scn,
-                             title=f"Overlay {runs} Runs - R(t)",
+                             title=f"Overlay {runs} Repliche - R(t)",
                              outfile=str(png_overlay_R), show=False)
 
     # Overlay N
     png_overlay_N = outdir / f"Overlay_N_Multi_{scn_slug}.png"  # <--- NUOVO
     plot_convergence_N_multi(all_runs_N_means, lam=lam, scn=scn,  # <--- NUOVO
-                             title=f"Overlay {runs} Runs - N(t)",
+                             title=f"Overlay {runs} Repliche - N(t)",
                              outfile=str(png_overlay_N), show=False)
 # ---------------- entrypoint ----------------
 def run_phase_convergence(config_dir: str = DEFAULT_CONFIG_DIR) -> None:

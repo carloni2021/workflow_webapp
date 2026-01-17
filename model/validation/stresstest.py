@@ -1,8 +1,9 @@
-import matplotlib.pyplot as plt
 import numpy as np
-
-from model.scenario import Scenario
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 from model.ecommerce import EcommerceModel
+from model.scenario import Scenario
+from rndbook.rngs import plantSeeds
 
 
 def plot_stress_transient(config_path):
@@ -42,72 +43,63 @@ def plot_stress_transient(config_path):
 
     plt.show()
 
-def plot_lambda_sweep_explosion(config_path):
-    """
-    Produce un grafico che mostra l'esplosione del tempo di risposta
-    all'aumentare del tasso di arrivo lambda (Stress Test Asintotico).
-    """
-    # 1. Caricamento scenario base per estrarre le domande di servizio
+def plot_step_stress_test(config_path):
+    #ATTENZIONE fase transiente diverse lambda, non vengono smaltite le richieste quindi cresce fortissimo
     scn = Scenario.from_yaml(config_path)
 
-    # Calcolo teorico della soglia di saturazione (1 / D_max)
-    # Basato sulle tue medie: A=0.2+0.4+0.1=0.7, B=0.8, P=0.4 (dai tuoi log precedenti)
-    # Se B è il collo di bottiglia con D_B = 0.8s, allora lambda_critico = 1.25
-    d_max = 0.8  # Domanda di servizio massima (collo di bottiglia)
-    lambda_critico = 1.0 / d_max
+    # 1. Setup Lambda e Modello Unico
+    lambda_critico = 1.25
+    lambdas = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.3]  # Esempio di rampa
 
-    # Definiamo un range di lambda che attraversi la soglia critica
-    # Es: da 0.2 fino a poco oltre il limite critico
-    lambdas = np.linspace(0.2, lambda_critico + 0.2, 15)
+    step_duration = 2000  # Tempo trascorso per ogni livello di carico
+
+    model = EcommerceModel(scn, seed=42)
+
     results_R = []
-    results_CI = []
+    time_axis = []
 
-    print(f"Inizio sweep di lambda per scenario: {scn.name}")
-    print(f"Soglia critica teorica prevista: {lambda_critico:.3f} req/s")
+    print(f"--- Inizio Simulazione Step-Stress Unica ---")
 
-    for lam in lambdas:
-        # Istanza del modello per ogni lambda
-        model = EcommerceModel(scn, seed=42)
+    current_time = 0
+    for i, lam in enumerate(lambdas):
+        # Cambiamo il tasso di arrivo "al volo"
         model.set_arrival_rate(lam)
 
-        # Eseguiamo run_finite con orizzonte fisso (es. 2000s)
-        # trace_convergence=True ci serve per ottenere l'ultimo intervallo di confidenza
-        res = model.run_finite(horizon_s=2000, warmup_s=200, trace_convergence=True)
+        # Definiamo la fine di questo step
+        current_time += step_duration
 
-        # Prendiamo l'ultima media e l'ultimo half-width calcolati
-        if res["R_convergence_trace"]:
-            last_t, last_mean, last_hw = res["R_convergence_trace"][-1]
-            results_R.append(last_mean)
-            results_CI.append(last_hw)
-        else:
-            results_R.append(float('nan'))
-            results_CI.append(0)
+        # Eseguiamo la simulazione continuando dalla posizione attuale
+        # Usiamo un warmup interno per ignorare il "colpo" del cambio di carico
+        res = model.run_finite(horizon_s=current_time, warmup_s=current_time - 1000)
 
-    # 3. Generazione del Grafico "a impennata"
-    plt.figure(figsize=(10, 6))
+        r_val = res.get("R_mean_s", float('nan'))
+        results_R.append(r_val)
+        time_axis.append(lam)  # Usiamo lambda come asse X per vedere la curva
 
-    # Plot dei risultati con barre di errore (CI95)
-    plt.errorbar(lambdas, results_R, yerr=results_CI, fmt='o-', color='red',
-                 ecolor='gray', capsize=5, label='R medio (Simulazione)')
+        status = "STABILE" if lam < lambda_critico else "INSTABILE"
+        print(f"Time {current_time}s | Lambda {lam:.2f} | R {r_val:.2f}s | {status}")
 
-    # Linea verticale per il limite teorico
-    plt.axvline(x=lambda_critico, color='black', linestyle='--', alpha=0.7,
-                label=f'Limite teorico (1/Dmax = {lambda_critico:.2f})')
+    # --- Grafico della Curva di Risposta ---
+    fig, ax1 = plt.subplots(figsize=(10, 6))
 
-    plt.title(f"Stress Test: Esplosione di R al variare di lambda - {scn.name}")
-    plt.xlabel("Tasso di arrivo lambda (req/s)")
-    plt.ylabel("Tempo di risposta medio R (s)")
-    plt.yscale('log')  # Scala logaritmica utile per vedere bene l'impennata
-    plt.grid(True, which="both", linestyle='--', alpha=0.5)
-    plt.legend()
+    # Curva di risposta
+    ax1.plot(lambdas, results_R, 'o-', color='tab:red', linewidth=2, label='R medio nel gradino')
+    ax1.axvline(x=lambda_critico, color='black', linestyle='--', label='Soglia Saturazione')
 
-    # Annotazione del regime di instabilità
-    plt.fill_betweenx([min(results_R), max(results_R)], lambda_critico, max(lambdas),
-                      color='orange', alpha=0.1, label='Zona Instabilità')
+    # Formattazione
+    ax1.set_yscale('log')
+    ax1.set_xlabel('Arrival Rate $lambda$ (req/s)')
+    ax1.set_ylabel('Response Time $R$ (s) - Log Scale')
+    ax1.set_title('Step-Stress Test: Evoluzione del Sistema in Simulazione Unica')
 
+    # Griglia e Legenda
+    ax1.grid(True, which="both", ls="-", alpha=0.3)
+    ax1.legend()
+
+    plt.tight_layout()
     plt.show()
 
-def run_batch_means_sweepST(config_path, lambda_min=0.2, lambda_max=2, steps=10):
+def run_batch_means_sweepST(config_path, lambda_min=0.2, lambda_max=1.4, steps=10):
     scn = Scenario.from_yaml(config_path)
     lambdas = np.linspace(lambda_min, lambda_max, steps)
 
@@ -136,6 +128,58 @@ def run_batch_means_sweepST(config_path, lambda_min=0.2, lambda_max=2, steps=10)
         results_HW.append(hw)
 
     return lambdas, results_R, results_HW
+
+def run_lambda_validation_continuous_rng(config_path):
+    scn = Scenario.from_yaml(config_path)
+
+    lambdas = np.linspace(0.20, 1.25, 20)
+    results_R = []
+    WARMUP = 0.0
+    MEASURE = 40000.0
+
+    plantSeeds(1234)
+    model = EcommerceModel(scn)
+
+    for lam in lambdas:
+        print(f"Simulazione per lambda = {lam:.3f}...", end=" ", flush=True)
+        model.set_arrival_rate(lam)
+        res = model.run_finite(horizon_s=MEASURE, warmup_s=WARMUP, verbose=False, trace_convergence=True)
+
+        trace_R = res.get("R_convergence_trace", [])
+        if trace_R:
+            r_mean = trace_R[-1][1]
+            results_R.append(r_mean)
+            print(f"R medio: {r_mean:.4f}")
+        else:
+            results_R.append(np.nan)
+        MEASURE=MEASURE+40000
+
+    # --- 2. GENERAZIONE GRAFICO ---
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(lambdas, results_R, 'o-', color='tab:green', label='Steady-state R (Continuous RNG)')
+
+    # Granularità asse Y: un segno ogni 10 unità
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(10))
+
+    # Zoom: impostiamo il limite massimo poco sopra il valore massimo trovato
+    # (es. se R_max è 192, il limite sarà 200)
+    if not np.isnan(results_R).all():
+        plt.ylim(0, max(results_R) + 10)
+
+    # Riga critica e ticks asse X
+    plt.axvline(x=1.25, color='red', linestyle='--', linewidth=2, label='$\lambda_{crit} = 1.25$')
+    current_ticks = list(plt.xticks()[0])
+    if 1.25 not in current_ticks:
+        plt.xticks(sorted(current_ticks + [1.25]))
+
+    plt.title(f"Validazione: $R$ vs $\lambda$ - Seed Unico Iniziale\nScenario: {scn.name}")
+    plt.xlabel("Arrival Rate $\lambda$ (jobs/s)")
+    plt.ylabel("Mean Response Time $R$ (s)")
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend()
+
+    print("\n[INFO] Generazione grafico completata.")
+    plt.show()
 # Esempio di utilizzo:
 # plot_lambda_sweep_explosion("config/1FA_base.yaml")
 # plot_stress_transient("config/1FA_stress.yaml")

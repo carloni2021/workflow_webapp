@@ -156,8 +156,8 @@ def sweep_R_and_N_vs_lambda(
     plt.figure(figsize=(7.5, 4.5))
     plt.errorbar(lambdas, R_means, yerr=R_errs, fmt='-o', capsize=3, label="R mean ± CI95")
     plt.xlabel("Tasso di arrivo λ (req/s)")
-    plt.ylabel("Tempo di risposta medio R (s)")
-    plt.title(f"{scenario_label} — R(λ)  |  n_reps={n_reps}, warmup={int(warmup_s)}s, measure={int(measure_s)}s")
+    plt.ylabel("Tempo di risposta medio R (t)")
+    plt.title(f"{scenario_label} — R(λ)  |  n_reps={n_reps}, measure={int(measure_s)}s")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     if save_png:
@@ -174,8 +174,8 @@ def sweep_R_and_N_vs_lambda(
     plt.figure(figsize=(7.5, 4.5))
     plt.errorbar(lambdas, N_means, yerr=N_errs, fmt='-o', capsize=3, label="N = X·R ± CI95")
     plt.xlabel("Tasso di arrivo λ (req/s)")
-    plt.ylabel("Utenti medi nel sistema N")
-    plt.title(f"{scenario_label} — N(λ)  |  n_reps={n_reps}, warmup={int(warmup_s)}s, measure={int(measure_s)}s")
+    plt.ylabel("Utenti medi nel sistema N (t)")
+    plt.title(f"{scenario_label} — N(λ)  |  n_reps={n_reps}, measure={int(measure_s)}s")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     if save_png:
