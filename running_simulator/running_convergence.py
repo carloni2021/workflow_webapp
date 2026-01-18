@@ -28,7 +28,6 @@ def _restore_streams(state: dict[str, int]) -> None:
     for name, seed in state.items():
         selectStream(STREAMS[name])
         putSeed(int(seed))
-
 # ---------------- core: run "in continuità" sui RNG streams ----------------
 # In running_convergence.py (assicurati di avere gli import: numpy, matplotlib.pyplot)
 
@@ -80,7 +79,15 @@ def _run_overlay_continued_rng(
         # Setup Modello
         model = EcommerceModel(scn)
         model.set_arrival_rate(lam)
+
+        # Ripristina lo stato RNG dall'ultima Run
         _restore_streams(last_state)
+
+        #stampa dei seed
+        # 1. Scatta lo snapshot (non passare argomenti se vuoi tutti gli stream)
+        snap = _snapshot_streams()
+        # 2. Stampa i seed della replica k
+        print(f"Seeds iniziale replica {k}: {snap}")
 
         # --- RUN ---
         res = model.run_finite(horizon_s=measure_s, warmup_s=warmup_s,
@@ -103,7 +110,7 @@ def _run_overlay_continued_rng(
 
             fname_R = single_R_dir / f"Run{k}_R_CI_{scn_slug}.png"
             _plot_ci_run(times, means, hws,
-                         title=f"Run {k} - R(t) ± Internal CI",
+                         title=f"Replica {k} - R(t) ± Internal CI",
                          ylabel="Response Time R(t)",
                          filename=str(fname_R),
                          color_line=this_run_color,
@@ -120,7 +127,7 @@ def _run_overlay_continued_rng(
 
             fname_N = single_N_dir / f"Run{k}_N_CI_{scn_slug}.png"
             _plot_ci_run(times_n, means_n, hws_n,
-                         title=f"Run {k} - N(t) ± Internal CI",
+                         title=f"Replica {k} - N(t) ± Internal CI",
                          ylabel="Avg Users N(t)",
                          filename=str(fname_N),
                          color_line=this_run_color,
@@ -133,7 +140,6 @@ def _run_overlay_continued_rng(
     plot_convergence_R_multi(all_runs_R_means, lam=lam, scn=scn,
                              title=f"Overlay {runs} Repliche - R(t)",
                              outfile=str(png_overlay_R), show=False)
-
     # Overlay N
     png_overlay_N = outdir / f"Overlay_N_Multi_{scn_slug}.png"  # <--- NUOVO
     plot_convergence_N_multi(all_runs_N_means, lam=lam, scn=scn,  # <--- NUOVO
