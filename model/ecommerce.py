@@ -8,7 +8,7 @@ import numpy as np
 
 from rndbook.rng_setup import init_rng_for_replication, use_stream
 from rndbook.rvgs import Exponential
-from rndbook.hyperexp import HyperExp2Balanced
+from rndbook.hyperexp import hyperexp2
 
 from model.scenario import Scenario
 from model.entities import JobRecord
@@ -59,11 +59,12 @@ class EcommerceModel:
                 continue
 
             mean_iat = 1.0 / lam
-            use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
             if self.scenario.arrival_process == "exp":
+                use_stream("arrivals")  # seleziona lo stream definito in rng_setup.STREAMS["arrivals"]
                 iat = Exponential(mean_iat)  # estrae l'inter-arrivo esponenziale con media 1/λ
             elif self.scenario.arrival_process == "hyperexp":
-                iat = HyperExp2Balanced(mean_iat, p=0.10)
+                use_stream("arrivals_H2_phase")
+                iat = hyperexp2(mean_iat, p=0.10)
             else:
                 raise ValueError(f"arrival_kind non supportato: {self.scenario.arrival_process}")
             yield self.env.timeout(iat)
