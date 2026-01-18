@@ -23,6 +23,7 @@ Puoi anche ottenere i parametri senza estrarre campioni:
 from typing import Tuple
 import math
 
+from rndbook.rng_setup import use_stream
 # Primitive RNG dal progetto
 from rndbook.rvgs import Erlang, Lognormal
 
@@ -42,13 +43,14 @@ def erlang_params_from_mean(mean: float, k: int) -> Tuple[int, float]:
     return n, b
 
 
-def demand_erlang(mean: float, k: int) -> float:
+def demand_erlang(mean: float, k: int, station: str) -> float:
     """
     Estrae un campione Erlang-k con media 'mean' e SCV=1/k.
     """
     if mean <= 0.0:
         return 0.0
     n, b = erlang_params_from_mean(mean, k)
+    use_stream(f"service_{station}")
     return Erlang(n, b)
 
 
@@ -74,4 +76,5 @@ def demand_lognormal(mean: float, c2: float) -> float:
     if mean <= 0.0:
         return 0.0
     mu, sigma = lognormal_params_from_mean_scv(mean, c2)
+    use_stream("service_B")
     return Lognormal(mu, sigma)

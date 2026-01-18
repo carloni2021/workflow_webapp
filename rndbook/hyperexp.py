@@ -29,7 +29,7 @@ La media risultante è mean, indipendentemente da p.
 Lo SCV vale c^2 = 1/(2 p (1-p)) - 1, ≥ 1.
 """
 from rndbook.rvgs import Exponential, Bernoulli
-from rng_setup import use_stream
+from rndbook.rng_setup import use_stream
 
 
 def hyperexp2(mean: float, p: float) -> float:

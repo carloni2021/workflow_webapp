@@ -102,7 +102,7 @@ class EcommerceModel:
                 d = self._exp_demand(sname, class_id)
             elif kindA == "erlang":
                 mean = float(self.scenario.service_demands.get(sname).get(class_id))
-                d = service_dist.demand_erlang(mean,3)
+                d = service_dist.demand_erlang(mean,3,sname)
 
         if sname=="B":
             if kindB == "exp":
@@ -115,7 +115,7 @@ class EcommerceModel:
                 d = self._exp_demand(sname, class_id)
             elif kindP == "erlang":
                 mean = float(self.scenario.service_demands.get(sname).get(class_id))
-                d = service_dist.demand_erlang(mean,3)
+                d = service_dist.demand_erlang(mean,3,sname)
         if d <= 0.0:
             return
 
